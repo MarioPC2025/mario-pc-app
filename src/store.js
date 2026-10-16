@@ -46,7 +46,7 @@ export function defaultCfg() {
     },
     presupuesto: { validez: 7, pagos: 'Efectivo o Mercado Pago' },
     etiqueta: { largo: 80, giro: 'ccw', tel: true },
-    impresora: { deviceId: '', nombre: '', modo: 'normal' },
+    impresora: { deviceId: '', nombre: '', modo: 'normal', intensidad: 'intensa' },
   };
 }
 const ULTIMO_DE_FABRICA = 77;
@@ -77,6 +77,7 @@ function normalizeCfg(raw) {
   if (typeof im.deviceId === 'string') o.impresora.deviceId = im.deviceId;
   if (typeof im.nombre === 'string') o.impresora.nombre = im.nombre;
   if (im.modo === 'normal' || im.modo === 'alternativo') o.impresora.modo = im.modo;
+  if (['suave', 'normal', 'intensa'].includes(im.intensidad)) o.impresora.intensidad = im.intensidad;
   return o;
 }
 

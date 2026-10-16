@@ -45,8 +45,16 @@ async function buscarEscritura(deviceId) {
   throw new Error('sin_escritura');
 }
 
+// Intensidad: densidad propia de la M02 (1F 11 02 n, la app oficial manda 04)
+// más el tiempo de calentamiento del cabezal (ESC 7, más alto = más oscuro).
+export const INTENSIDADES = {
+  suave: { densidad: 0x02, calor: 80 },
+  normal: { densidad: 0x04, calor: 140 },
+  intensa: { densidad: 0x08, calor: 200 },
+};
+
 // Canvas de 384 px de ancho → bytes listos para la M02
-export function canvasARaster(cv, modo = 'normal') {
+export function canvasARaster(cv, modo = 'normal', intensidad = 'intensa') {
   const w = cv.width, h = cv.height, bpl = Math.ceil(w / 8);
   const px = cv.getContext('2d').getImageData(0, 0, w, h).data;
   const bits = new Uint8Array(bpl * h);
@@ -59,7 +67,11 @@ export function canvasARaster(cv, modo = 'normal') {
   }
   const out = [];
   if (modo === 'alternativo') out.push(0x10, 0xff, 0xfe, 0x01);
-  out.push(0x1b, 0x40, 0x1b, 0x61, 0x01);
+  const it = INTENSIDADES[intensidad] || INTENSIDADES.intensa;
+  out.push(0x1b, 0x40);
+  out.push(0x1f, 0x11, 0x02, it.densidad);
+  out.push(0x1b, 0x37, 0x07, it.calor, 0x02);
+  out.push(0x1b, 0x61, 0x01);
   for (let line = 0; line < h; line += 255) {
     const n = Math.min(255, h - line);
     out.push(0x1d, 0x76, 0x30, 0x00, bpl & 0xff, bpl >> 8, n & 0xff, n >> 8);
@@ -71,10 +83,10 @@ export function canvasARaster(cv, modo = 'normal') {
 }
 
 export async function imprimir(cfgImpresora, cv, onProgreso) {
-  const { deviceId, modo } = cfgImpresora;
+  const { deviceId, modo, intensidad } = cfgImpresora;
   if (!deviceId) throw new Error('sin_impresora');
   await iniciar();
-  const datos = canvasARaster(cv, modo);
+  const datos = canvasARaster(cv, modo, intensidad);
   await BleClient.connect(deviceId, () => {}, { timeout: 12000 });
   try {
     const w = await buscarEscritura(deviceId);

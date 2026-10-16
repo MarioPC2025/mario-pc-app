@@ -83,12 +83,20 @@ export const vistaAjustes = {
       t.cliente.nombre = 'Prueba'; t.equipo.marca = 'Mario'; t.equipo.modelo = 'PC';
       imprimirEtiqueta(t, prueba);
     });
+    const intens = el('div', { class: 'seg seg3', role: 'radiogroup', 'aria-label': 'Intensidad de impresión' });
+    [['suave', 'Suave'], ['normal', 'Normal'], ['intensa', 'Intensa']].forEach(([id, n]) => {
+      const inp = el('input', { type: 'radio', name: 'intensidad', checked: (im.intensidad || 'intensa') === id });
+      inp.addEventListener('change', () => { if (inp.checked) { im.intensidad = id; guardarCfg(); } });
+      intens.append(el('label', { class: 'opt' }, inp, el('span', { text: n })));
+    });
     const modo = el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: im.modo === 'alternativo', onchange: (e) => { im.modo = e.target.checked ? 'alternativo' : 'normal'; guardarCfg(); } }),
       el('span', { text: 'Modo alternativo (probalo solo si conecta pero no imprime)' }));
     wrap.append(s({ id: 'impresora', nombre: 'Impresora Phomemo' },
       el('p', { class: im.deviceId ? 'state ok' : 'state', text: im.deviceId ? 'Conectada: ' + im.nombre : 'Sin conectar' }),
       el('div', { class: 'stack' },
         el('button', { type: 'button', class: 'btn primary', text: im.deviceId ? 'Elegir otra impresora' : 'Conectar la Phomemo', onclick: async () => { if (await conectarImpresora()) recargar(); } }),
+        im.deviceId ? el('div', { class: 'field' }, el('label', { text: 'Intensidad de impresión' }), intens,
+          el('p', { class: 'hint', text: 'Intensa es la equivalente a "dedicated" de la app de Phomemo: sale más negra.' })) : null,
         im.deviceId ? prueba : null, im.deviceId ? modo : null,
         im.deviceId ? el('button', { type: 'button', class: 'btn ghost small', text: 'Olvidar esta impresora', onclick: () => { im.deviceId = ''; im.nombre = ''; guardarCfg(); recargar(); } }) : null),
       el('p', { class: 'hint', text: 'Prendé la Phomemo y tené el Bluetooth del teléfono activado. No hace falta emparejarla desde Android: se elige acá.' })));

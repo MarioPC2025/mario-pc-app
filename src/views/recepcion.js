@@ -99,8 +99,9 @@ export function bloque(titulo, ...hijos) {
 
 export function radios(name, items, get, set) {
   const box = el('div', { class: 'seg', role: 'radiogroup' });
+  const grupo = name + '-' + Math.random().toString(36).slice(2, 8); // un solo nombre para todo el grupo
   items.forEach((it) => {
-    const inp = el('input', { type: 'radio', name: name + '-' + Math.random().toString(36).slice(2, 6), value: it.id, checked: get() === it.id });
+    const inp = el('input', { type: 'radio', name: grupo, value: it.id, checked: get() === it.id });
     inp.addEventListener('change', () => { if (inp.checked) set(it.id); });
     box.append(el('label', { class: 'opt' }, inp, el('span', { text: it.nombre })));
   });
