@@ -1,6 +1,6 @@
 // Recepción de equipos: la ficha que antes era el artefacto "Recepción Mario PC".
 
-import { el, campo, debounce, toast } from '../util.js';
+import { el, campo, debounce, toast, addDays, sumarHabiles, diaCorto } from '../util.js';
 import { db, trabajoVacio, guardarTrabajo, trabajoPorId, siguienteOrden } from '../store.js';
 import { EQUIPOS, ACCESORIOS, DANOS, CLAVES } from '../catalog.js';
 import { lienzoEtiqueta, lienzoComprobante } from '../acciones.js';
@@ -37,6 +37,19 @@ export const vistaRecepcion = {
     const modelo = campo('Modelo', { maxlength: '40', value: t.equipo.modelo }, (v) => { t.equipo.modelo = v; cambio(); });
     const serie = campo('N° de serie / IMEI', { maxlength: '32', value: t.equipo.serie, autocapitalize: 'characters' }, (v) => { t.equipo.serie = v; cambio(); });
 
+    // Entrega prometida: opcional, con atajos
+    if (t.entrega == null) t.entrega = '';
+    const entrega = campo('Fecha', { type: 'date', value: t.entrega }, (v) => { t.entrega = v; cambio(); pintarAtajos(); });
+    const atajos = el('div', { class: 'chips' });
+    function pintarAtajos() {
+      const base = t.fecha || undefined;
+      const ops = [['Sin fecha', ''], ['Mañana', addDays(base, 1)], ['3 días hábiles', sumarHabiles(base, 3)], ['1 semana', addDays(base, 7)]];
+      atajos.replaceChildren(...ops.map(([n, v]) => el('button', {
+        type: 'button', class: 'fchip', 'aria-pressed': String((t.entrega || '') === v),
+        onclick: () => { t.entrega = v; entrega.input.value = v; cambio(); pintarAtajos(); },
+      }, n, v ? el('span', { class: 'fcount', text: diaCorto(v) }) : null)));
+    }
+    pintarAtajos();
     const falla = campo('Falla que reporta', { multiline: true, rows: '3', maxlength: '240', value: t.falla, placeholder: 'Qué le pasa al equipo, con las palabras del cliente' }, (v) => { t.falla = v; cambio(); });
 
     const acc = chips(ACCESORIOS.map((a) => ({ id: a, nombre: a })), t.acc, cambio);
@@ -82,6 +95,7 @@ export const vistaRecepcion = {
       bloque('Cliente', el('div', { class: 'two' }, nombre.wrap, tel.wrap)),
       bloque('Equipo', tipos, el('div', { class: 'two' }, marca.wrap, modelo.wrap), serie.wrap),
       bloque('Falla', falla.wrap),
+      bloque('Entrega prometida', atajos, entrega.wrap, el('p', { class: 'hint', text: 'Opcional. Si la ponés, sale grande en la etiqueta.' })),
       bloque('Accesorios que deja', acc, accOtro.wrap, el('p', { class: 'hint', text: 'Si no tildás nada, figura "Ninguno".' })),
       bloque('Estado físico al recibir', danos, danoOtro.wrap, el('p', { class: 'hint', text: 'Si no tildás nada, figura "Sin daños visibles".' })),
       bloque('Clave de acceso', claves, el('p', { class: 'hint', text: 'Solo se anota si tiene o no. La clave no se escribe ni se imprime.' })),

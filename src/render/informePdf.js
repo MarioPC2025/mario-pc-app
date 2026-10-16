@@ -4,14 +4,15 @@
 import { jsPDF } from 'jspdf';
 import { fmt } from '../util.js';
 import { MARK_COLOR } from '../brand.js';
+import { qrEnPdf } from '../qr.js';
 
 const INK = [12, 17, 14], MUTED = [95, 107, 101], LINE = [214, 221, 217], ZEBRA = [243, 246, 244],
   GREEN = [29, 221, 101], GREEN_D = [10, 122, 53], DARK = [7, 9, 10], AMBER = [176, 116, 0], RED = [190, 52, 40];
 
-// Si no entra en una hoja, se vuelve a armar más compacto (hasta 3 intentos)
+// Si no entra en una hoja, se vuelve a armar más compacto (hasta 5 intentos)
 export function armarInformePdf(d) {
   let doc = null;
-  for (const k of [1, 0.9, 0.82]) {
+  for (const k of [1, 0.9, 0.82, 0.75, 0.68, 0.6]) {
     doc = armar(d, k);
     if (doc.getNumberOfPages() === 1) break;
   }
@@ -41,7 +42,7 @@ function armar(d, k) {
     font('normal', 9); doc.setTextColor(200, 208, 204);
     doc.text('Orden N° ' + d.orden, W - M, 21.5, { align: 'right' });
     doc.text('Entregado el ' + d.fechaEntrega, W - M, 26.5, { align: 'right' });
-    y = v(46);
+    y = 46;
   }
   function encabezadoChico() {
     fill(DARK); doc.rect(0, 0, W, 14, 'F');
@@ -58,7 +59,7 @@ function armar(d, k) {
     y += v(4);
     font('bold', 8.5); color(INK); doc.text(titulo.toUpperCase(), M, y, { charSpace: 0.5 });
     stroke(GREEN); doc.setLineWidth(0.7); doc.line(M, y + 2, M + 22, y + 2);
-    y += v(8);
+    y += Math.max(7, v(8));
   }
   function parrafo(texto, size = 10.5, col = INK) {
     font('normal', size); color(col);
@@ -100,12 +101,12 @@ function armar(d, k) {
   const tono = d.resultado.id === 'sin_arreglo' ? RED : (d.resultado.id === 'parcial' || d.resultado.id === 'diagnostico') ? AMBER : GREEN;
   font('normal', 9.5);
   const fr = doc.splitTextToSize(d.resultado.frase, CW - 14);
-  const rh = v(15) + fr.length * v(4.2);
+  const rh = 15 + fr.length * 4.2;
   fill(ZEBRA); doc.rect(M, y, CW, rh, 'F');
   fill(tono); doc.rect(M, y, 1.8, rh, 'F');
   font('bold', 7.5); color(MUTED); doc.text('RESULTADO', M + 7, y + 6.5, { charSpace: 0.5 });
-  font('bold', 15); color(tono === GREEN ? GREEN_D : tono); doc.text(d.resultado.nombre, M + 7, y + v(13));
-  font('normal', 9.5); color(INK); doc.text(fr, M + 7, y + v(18.5));
+  font('bold', 15); color(tono === GREEN ? GREEN_D : tono); doc.text(d.resultado.nombre, M + 7, y + 13);
+  font('normal', 9.5); color(INK); doc.text(fr, M + 7, y + 18.5);
   y += rh + v(4);
 
   /* ---------- Secciones ---------- */
@@ -162,10 +163,10 @@ function armar(d, k) {
       const h = v(9);
       lugar(h);
       stroke(LINE); doc.setLineWidth(0.3); doc.line(M, y, M + CW, y);
-      font('normal', 10); color(INK); doc.text(doc.splitTextToSize(m.nombre || '-', 86)[0], M, y + 6);
-      color(MUTED); doc.text(doc.splitTextToSize(m.antes || '-', 36)[0], cA, y + 6);
-      flecha(cD - 12, y + 4.6, 7);
-      font('bold', 11); color(GREEN_D); doc.text(doc.splitTextToSize(m.despues || '-', CW - (cD - M))[0], cD, y + 6);
+      font('normal', 10); color(INK); doc.text(doc.splitTextToSize(m.nombre || '-', 86)[0], M, y + h * 0.66);
+      color(MUTED); doc.text(doc.splitTextToSize(m.antes || '-', 36)[0], cA, y + h * 0.66);
+      flecha(cD - 12, y + h * 0.53, 7);
+      font('bold', 11); color(GREEN_D); doc.text(doc.splitTextToSize(m.despues || '-', CW - (cD - M))[0], cD, y + h * 0.66);
       y += h;
     });
     stroke(LINE); doc.line(M, y, M + CW, y);
@@ -224,7 +225,23 @@ function armar(d, k) {
     font('bold', 7.5); doc.setTextColor(150, 162, 156); doc.text('IMPORTE TOTAL', bx + 6, y + 6.5, { charSpace: 0.5 });
     font('bold', 20); color(GREEN); doc.text(fmt(d.total), bx + 60, y + 19, { align: 'right' });
   }
-  y += 32;
+  y += 30;
+
+  /* ---------- Reseña en Google ---------- */
+  if (d.resenas) {
+    const rh = 20, q = 16;
+    lugar(rh + 1);
+    stroke(LINE); doc.setLineWidth(0.4); doc.roundedRect(M, y, CW, rh, 1.5, 1.5, 'S');
+    qrEnPdf(doc, d.resenas, M + 2, y + 2, q, 'M');
+    const tx = M + q + 6;
+    font('bold', 11.5); color(INK); doc.text('¿Te gustó cómo quedó tu equipo?', tx, y + 7);
+    font('normal', 9); color(MUTED);
+    doc.text('Escaneá el código con la cámara y dejame una reseña en Google: me ayudás muchísimo.', tx, y + 11.8, { maxWidth: CW - q - 9 });
+    const corto = d.resenas.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    font('bold', 9); color(GREEN_D);
+    doc.textWithLink(corto, tx, y + 16.6, { url: d.resenas });
+    y += rh + 2;
+  }
 
   /* ---------- Pie en cada página ---------- */
   const pages = doc.getNumberOfPages();

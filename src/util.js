@@ -82,6 +82,24 @@ export function fechaCorta(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
   return m ? m[3] + '/' + m[2] : '';
 }
+const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+// "vie 18/10"
+export function diaCorto(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+  if (!m) return '';
+  return DIAS[new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay()] + ' ' + m[3] + '/' + m[2];
+}
+// suma días hábiles (sin sábados ni domingos)
+export function sumarHabiles(iso, n) {
+  let d = iso || todayISO(), k = 0;
+  while (k < n) {
+    d = addDays(d, 1);
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d);
+    const dow = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay();
+    if (dow !== 0 && dow !== 6) k++;
+  }
+  return d;
+}
 export function addDays(iso, n) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || todayISO());
   const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + n));

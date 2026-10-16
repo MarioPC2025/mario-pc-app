@@ -1,6 +1,6 @@
 // Ficha de un trabajo: estado, acciones y todos los datos.
 
-import { el, fmt, fechaFmt, haceCuanto, botonConfirmar, toast } from '../util.js';
+import { el, fmt, fechaFmt, haceCuanto, botonConfirmar, toast, diaCorto } from '../util.js';
 import { db, trabajoPorId, guardarTrabajo, borrarTrabajo } from '../store.js';
 import { ESTADOS, equipoNombre, claveNombre, RESULTADOS } from '../catalog.js';
 import { accList, danoList } from '../render/recepcion.js';
@@ -56,7 +56,8 @@ export const vistaTrabajo = {
       el('div', { class: 'hero-txt' },
         el('p', { class: 'hero-cli', text: t.cliente.nombre.trim() || 'Sin nombre' }),
         el('p', { class: 'hero-eq', text: [equipoNombre(t.equipo.tipo), t.equipo.marca, t.equipo.modelo].filter((x) => String(x).trim()).join(' ') }),
-        el('p', { class: 'hint', text: 'Entró el ' + fechaFmt(t.fecha) + ' (' + haceCuanto(t.fecha) + ')' }))),
+        el('p', { class: 'hint', text: 'Entró el ' + fechaFmt(t.fecha) + ' (' + haceCuanto(t.fecha) + ')' }),
+        t.entrega ? el('p', { class: 'hero-due', text: 'Entrega prometida: ' + diaCorto(t.entrega) }) : null)),
       estados);
 
     // Acciones

@@ -24,7 +24,7 @@ const setJSON = (key, v) => rawSet(key, JSON.stringify(v));
 /* ---------- Valores de fábrica (tus precios y ajustes al 16/10/2026) ---------- */
 export function defaultCfg() {
   return {
-    negocio: { wsp: '11 2399-9259', ig: '@mariopc.com.ar', web: 'mariopc.com.ar', garantiaDias: 7 },
+    negocio: { wsp: '11 2399-9259', ig: '@mariopc.com.ar', web: 'mariopc.com.ar', garantiaDias: 7, resenas: 'https://maps.app.goo.gl/NZ7zbYxNTpa6Mxpr6' },
     precios: {
       mo: {
         bateria: { celular: 20000, notebook: 25000 },
@@ -56,7 +56,7 @@ function normalizeCfg(raw) {
   if (!raw || typeof raw !== 'object') return d;
   const o = JSON.parse(JSON.stringify(d));
   const n = raw.negocio || {};
-  for (const k of ['wsp', 'ig', 'web']) if (typeof n[k] === 'string') o.negocio[k] = n[k];
+  for (const k of ['wsp', 'ig', 'web', 'resenas']) if (typeof n[k] === 'string') o.negocio[k] = n[k];
   if (isFinite(+n.garantiaDias) && n.garantiaDias !== '' && n.garantiaDias != null) o.negocio.garantiaDias = Math.max(0, Math.min(365, +n.garantiaDias));
   const p = raw.precios || {};
   if (p.mo && typeof p.mo === 'object') o.precios.mo = p.mo;
@@ -134,7 +134,7 @@ export function trabajoVacio() {
     estado: 'recibido',
     cliente: { nombre: '', tel: '' },
     equipo: { tipo: 'notebook', marca: '', modelo: '', serie: '' },
-    falla: '', acc: [], accOtro: '', danos: [], danoOtro: '', clave: 'no', obs: '',
+    entrega: '', falla: '', acc: [], accOtro: '', danos: [], danoOtro: '', clave: 'no', obs: '',
     presupuestoId: null,
     informe: null,
   };

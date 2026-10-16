@@ -1,10 +1,13 @@
 // Pantalla principal: los equipos que entraron, del más nuevo al más viejo.
 
-import { el, fechaCorta, haceCuanto, diasEntre, todayISO } from '../util.js';
+import { el, fechaCorta, haceCuanto, diasEntre, todayISO, diaCorto } from '../util.js';
 import { db } from '../store.js';
 import { ESTADOS, estadoCorto } from '../catalog.js';
 import { equipoTexto } from '../render/recepcion.js';
 import { ir, setTitulo, setAcciones } from '../nav.js';
+import { abrirEscaner } from '../scanner.js';
+import { PREFIJO_FICHA } from '../qr.js';
+import { toast } from '../util.js';
 
 let filtro = 'activos';
 let busqueda = '';
@@ -63,13 +66,29 @@ export const vistaTrabajos = {
     const aviso = avisoRespaldo();
     main.append(el('div', { class: 'wrap' }, aviso, buscar, chips, lista));
     main.append(el('button', { type: 'button', class: 'fab', onclick: () => ir('recepcion', {}) }, el('span', { 'aria-hidden': 'true', text: '+' }), 'Recibir equipo'));
-    setAcciones([]);
+    setAcciones([el('button', { type: 'button', class: 'icon-btn scan-btn', 'aria-label': 'Escanear etiqueta', onclick: escanear, html: '<svg viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 12h8"/></svg>' })]);
   },
 };
 
+// Lee el QR de la etiqueta y abre esa ficha
+export function escanear() {
+  abrirEscaner((codigo) => {
+    if (!codigo.startsWith(PREFIJO_FICHA)) { toast('Ese QR no es de una etiqueta de Mario PC'); return; }
+    const id = codigo.slice(PREFIJO_FICHA.length);
+    const t = db.trabajos.find((x) => x.id === id);
+    if (!t) { toast('Esa ficha no está en este teléfono (¿la borraste?)', 3500); return; }
+    ir('trabajo', { id: t.id });
+  });
+}
+
 function tarjeta(t) {
   const dias = diasEntre(t.fecha, todayISO());
-  const demora = (t.estado === 'recibido' || t.estado === 'en_curso') && dias >= 7;
+  const activo = t.estado === 'recibido' || t.estado === 'en_curso';
+  const faltan = t.entrega ? diasEntre(todayISO(), t.entrega) : null;
+  const demora = activo && (faltan != null ? faltan <= 1 : dias >= 7);
+  const cuando = activo && t.entrega
+    ? (faltan < 0 ? 'Se pasó la entrega (' + diaCorto(t.entrega) + ')' : faltan === 0 ? 'Se entrega hoy' : faltan === 1 ? 'Se entrega mañana' : 'Para el ' + diaCorto(t.entrega))
+    : null;
   return el('button', { type: 'button', class: 'card job', onclick: () => ir('trabajo', { id: t.id }) },
     el('span', { class: 'job-n' }, el('small', { text: 'N°' }), String(t.orden)),
     el('span', { class: 'job-main' },
@@ -77,7 +96,7 @@ function tarjeta(t) {
       el('span', { class: 'job-eq', text: equipoTexto(t) }),
       el('span', { class: 'job-meta' },
         el('span', { class: 'badge b-' + t.estado, text: estadoCorto(t.estado) }),
-        el('span', { class: demora ? 'warn' : '', text: (t.estado === 'entregado' && t.informe ? 'Entregado ' + fechaCorta(t.informe.fechaEntrega) : 'Entró ' + haceCuanto(t.fecha)) }),
+        el('span', { class: demora ? 'warn' : '', text: cuando || (t.estado === 'entregado' && t.informe ? 'Entregado ' + fechaCorta(t.informe.fechaEntrega) : 'Entró ' + haceCuanto(t.fecha)) }),
         t.informe && t.informe.generado ? el('span', { class: 'mini', text: 'Informe' }) : null)));
 }
 

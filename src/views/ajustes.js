@@ -26,7 +26,8 @@ export const vistaAjustes = {
     }).wrap;
     wrap.append(s({ id: 'negocio', nombre: 'Tu negocio' },
       el('div', { class: 'two' }, g('wsp', 'Tu WhatsApp', { type: 'tel', inputmode: 'tel', maxlength: '24' }), g('ig', 'Instagram', { maxlength: '40' }), g('web', 'Web', { maxlength: '40' }), garantia),
-      el('p', { class: 'hint', text: 'Salen en el pie del presupuesto, del comprobante y del informe. La garantía se usa en los tres.' })));
+      g('resenas', 'Link para reseñas de Google', { type: 'url', inputmode: 'url', maxlength: '200' }),
+      el('p', { class: 'hint', text: 'Salen en el pie del presupuesto, del comprobante y del informe. La garantía se usa en los tres. El link de reseñas va como QR en el informe y en el mensaje al cliente; si lo dejás vacío, no aparece.' })));
 
     // Presupuesto
     wrap.append(s({ id: 'pres', nombre: 'Presupuesto' }, el('div', { class: 'two' },

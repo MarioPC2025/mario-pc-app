@@ -105,7 +105,7 @@ export function datosInforme(t) {
     pruebas: inf.pruebas, recomendaciones: recs,
     total: inf.total, mostrarTotal: inf.mostrarTotal,
     garantiaDias: n.garantiaDias, garantiaHasta: fechaFmt(addDays(inf.fechaEntrega || todayISO(), n.garantiaDias)),
-    wsp: n.wsp.trim(), ig: n.ig.trim(), web: n.web.trim(),
+    wsp: n.wsp.trim(), ig: n.ig.trim(), web: n.web.trim(), resenas: (n.resenas || '').trim(),
   };
 }
 export function nombreInforme(t) {
@@ -136,6 +136,8 @@ export function mensajeListo(t) {
 export function mensajeInforme(t) {
   const nom = primerNombre(t);
   return (nom ? 'Hola ' + nom + '! ' : 'Hola! ') + 'Te paso el informe técnico de tu ' + equipoCorto(t) +
-    ' (orden N° ' + t.orden + '), con todo lo que le hice y la garantía. Cualquier duda, escribime.\n\nMario PC';
+    ' (orden N° ' + t.orden + '), con todo lo que le hice y la garantía. Cualquier duda, escribime.' +
+    ((db.cfg.negocio.resenas || '').trim() ? '\n\nSi te gustó el trabajo, me ayudás muchísimo dejando una reseña en Google: ' + db.cfg.negocio.resenas.trim() : '') +
+    '\n\nMario PC';
 }
 export function avisarListo(t) { abrirWhatsApp(t.cliente.tel, mensajeListo(t)); }

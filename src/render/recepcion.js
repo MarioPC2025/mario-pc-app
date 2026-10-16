@@ -2,7 +2,8 @@
 // Es el mismo diseño del artefacto "Recepción Mario PC", ahora alimentado con la ficha del trabajo.
 
 import { ACCESORIOS, DANOS, equipoNombre, claveNombre } from '../catalog.js';
-import { fechaFmt } from '../util.js';
+import { fechaFmt, diaCorto } from '../util.js';
+import { PREFIJO_FICHA, dibujarQR, modulosQR } from '../qr.js';
 import { MARK_ETIQUETA, MARK_A4 } from '../brand.js';
 import { FD, FB, FM, wrapLines, limitLines, toBW, cargarImagen } from './canvas.js';
 
@@ -70,9 +71,22 @@ export function drawLabel(t, cfg) {
     c.font = '700 22px ' + FM; c.textAlign = 'right'; c.fillText(ds, W - M, dy); c.textAlign = 'left';
   } else { c.font = '700 22px ' + FM; c.fillText(d0, tx, M + 62); }
   c.fillRect(M, M + bh + 10, W - 2 * M, 3);
-  // filas
-  const top = M + bh + 10 + 3 + 14, estadoTop = H - M - 36, avail = estadoTop - 8 - top;
-  const valueX = M + 112, maxW = W - valueX - M, rows = labelRows(t, cfg);
+  // filas a la izquierda, QR a la derecha y, si hay fecha prometida, la entrega abajo
+  const top = M + bh + 10 + 3 + 14;
+  const entrega = t.entrega ? diaCorto(t.entrega) : '';
+  const pieH = entrega ? 44 : 0;
+  const bottom = H - M - pieH;
+  const qrTexto = PREFIJO_FICHA + t.id;
+  const n = modulosQR(qrTexto);
+  const valueX = M + 112;
+  // el QR más grande que deje al menos 210 px para el texto
+  const altoQR = H - M - top + 4;
+  const modulo = Math.max(3, Math.min(Math.floor(altoQR / n), Math.floor((W - valueX - M - 16 - 210) / n)));
+  const lado = n * modulo;
+  const qrX = W - M - lado, qrY = top - 4 + Math.round((altoQR - lado) / 2);
+  dibujarQR(c, qrTexto, qrX, qrY, modulo);
+  const avail = bottom - 8 - top;
+  const maxW = qrX - 16 - valueX, rows = labelRows(t, cfg);
   function layout(fs, cap) {
     c.font = '700 ' + fs + 'px ' + FD;
     const lh = Math.round(fs * 1.2), out = [];
@@ -85,8 +99,8 @@ export function drawLabel(t, cfg) {
     return { out, h: h - 6, lh, fs };
   }
   let lay = null;
-  for (const s of [26, 24, 22, 21, 20, 19, 18]) { lay = layout(s); if (lay.h <= avail) break; }
-  if (lay.h > avail) lay = layout(18, { FALLA: 2, 'DAÑOS': 1 });
+  for (const sz of [26, 24, 22, 21, 20, 19, 18, 17]) { lay = layout(sz); if (lay.h <= avail) break; }
+  if (lay.h > avail) lay = layout(17, { FALLA: 2, 'DAÑOS': 1 });
   let y = top;
   lay.out.forEach((r) => {
     const base = y + Math.round(lay.fs * 0.92);
@@ -95,18 +109,13 @@ export function drawLabel(t, cfg) {
     r.lines.forEach((l, j) => c.fillText(l, valueX, base + j * lay.lh));
     y += r.lines.length * lay.lh + 6;
   });
-  // estado
-  const ey = H - M - 8, opts = ['Pendiente', 'En curso', 'Listo'];
-  let efs = 22;
-  const ancho = (sz) => { c.font = '700 ' + sz + 'px ' + FD; let s = 0; opts.forEach((o) => { s += 32 + c.measureText(o).width + 20; }); return s; };
-  if (valueX + ancho(efs) > W - M) efs = 18;
-  c.font = '700 18px ' + FD; c.fillText('ESTADO', M, ey);
-  let x = valueX; c.font = '700 ' + efs + 'px ' + FD; c.strokeStyle = '#000'; c.lineWidth = 3;
-  opts.forEach((o) => {
-    c.strokeRect(x + 1.5, ey - 22.5, 21, 21);
-    c.fillText(o, x + 32, ey);
-    x += 32 + c.measureText(o).width + 20;
-  });
+  // entrega prometida
+  if (entrega) {
+    const ey = H - M - 6;
+    c.fillRect(M, ey - 40, qrX - 16 - M, 2);
+    c.font = '700 18px ' + FD; c.fillText('ENTREGA', M, ey - 6);
+    c.font = '400 40px ' + FB; c.fillText(entrega.toUpperCase(), valueX, ey);
+  }
   toBW(cv);
   return cv;
 }
