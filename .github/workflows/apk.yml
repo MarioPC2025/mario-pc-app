@@ -17,14 +17,14 @@ jobs:
   apk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -40,7 +40,13 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          set -o pipefail
+          if ! ./gradlew assembleRelease --no-daemon 2>&1 | tee gradle.log; then
+            # deja el motivo del error como anotación visible en el resumen de la compilación
+            grep -A 25 "What went wrong" gradle.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            grep -E "^e: |error:|FAILURE" gradle.log | head -20 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          fi
 
       - name: Nombrar el APK
         id: apk
