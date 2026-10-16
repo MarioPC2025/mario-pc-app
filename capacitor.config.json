@@ -1,0 +1,23 @@
+{
+  "appId": "ar.com.mariopc.taller",
+  "appName": "Mario PC",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#07090a"
+  },
+  "plugins": {
+    "BluetoothLe": {
+      "displayStrings": {
+        "scanning": "Buscando impresoras…",
+        "cancel": "Cancelar",
+        "availableDevices": "Impresoras cerca",
+        "noDeviceFound": "No encontré ninguna. ¿Está prendida la Phomemo?"
+      }
+    },
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover",
+      "style": "DARK"
+    }
+  }
+}

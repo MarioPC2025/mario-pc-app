@@ -1,0 +1,66 @@
+# Compila el APK en cada cambio a main y lo publica en "Releases" para bajarlo desde el teléfono.
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Armar la app web y copiarla a Android
+        run: npm run sync
+
+      - name: Compilar el APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Nombrar el APK
+        id: apk
+        run: |
+          V="1.0.${GITHUB_RUN_NUMBER}"
+          cp android/app/build/outputs/apk/release/app-release.apk "MarioPC-${V}.apk"
+          echo "version=${V}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MarioPC-${{ steps.apk.outputs.version }}
+          path: MarioPC-*.apk
+
+      - name: Publicar en Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTAS: ${{ github.event.head_commit.message }}
+        run: |
+          V="${{ steps.apk.outputs.version }}"
+          gh release create "v${V}" "MarioPC-${V}.apk" \
+            --title "Mario PC ${V}" \
+            --notes "${NOTAS:-Compilación manual}" \
+            --latest

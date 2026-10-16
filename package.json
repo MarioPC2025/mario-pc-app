@@ -1,0 +1,27 @@
+{
+  "name": "mario-pc-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "App de taller de Mario PC: presupuestos, recepción de equipos e informes técnicos",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "sync": "npm run build && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor-community/bluetooth-le": "^8.3.0",
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/share": "^8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
+    "@fontsource/bebas-neue": "^5.3.0",
+    "@fontsource/dm-sans": "^5.3.0",
+    "@fontsource/space-mono": "^5.3.0",
+    "esbuild": "^0.28.2",
+    "jspdf": "^4.2.1"
+  }
+}
