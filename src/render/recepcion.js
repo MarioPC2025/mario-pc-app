@@ -148,7 +148,7 @@ function drawA4(t, cfg, k) {
   let mkx = X;
   if (MK && MK.a4) { const mkh = mm(22), mkw = mkh * MK.a4.naturalWidth / MK.a4.naturalHeight; c.drawImage(MK.a4, X, y, mkw, mkh); mkx = X + mkw + mm(5); }
   F('400', 17, FB); c.fillText('MARIO PC', mkx, y + mm(13));
-  F('400', 4.2, FD); c.fillText('Reparación de PC y celulares', mkx, y + mm(20));
+  F('400', 4.2, FD); c.fillText('Reparación de PC y notebooks', mkx, y + mm(20));
   const bx = PW - X - mm(46), by = y;
   c.fillRect(bx, by, mm(46), mm(22));
   c.fillStyle = '#fff'; F('700', 3.8, FD); c.fillText('N°', bx + mm(4), by + mm(8));
