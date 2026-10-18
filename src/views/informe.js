@@ -3,7 +3,7 @@
 import { el, campo, dinero, toast, stampISO, fechaFmt, addDays, debounce } from '../util.js';
 import { db, trabajoPorId, guardarTrabajo, informeVacio } from '../store.js';
 import { RESULTADOS, TAREAS, PRUEBAS, METRICAS_SUGERIDAS, RECOMENDACIONES } from '../catalog.js';
-import { compartirInforme, mensajeInforme } from '../acciones.js';
+import { verInforme, mensajeInforme } from '../acciones.js';
 import { abrirWhatsApp } from '../files.js';
 import { setTitulo, hoja } from '../nav.js';
 import { bloque, chips } from './recepcion.js';
@@ -80,14 +80,13 @@ export const vistaInforme = {
     const total = el('div', { class: 'field' }, el('label', { text: 'Importe total' }), dinero(inf.total, (v) => { inf.total = v; guardar(); }));
     const mostrar = el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: inf.mostrarTotal, onchange: (e) => { inf.mostrarTotal = e.target.checked; guardar(); } }), el('span', { text: 'Mostrar el importe en el informe' }));
 
-    const btnPdf = el('button', { type: 'button', class: 'btn primary', text: 'Compartir PDF', onclick: async () => {
+    const btnPdf = el('button', { type: 'button', class: 'btn primary', text: 'Ver PDF', onclick: () => {
       guardarTrabajo(t);
       if (!inf.diagnostico.trim() && !inf.tareas.length && !inf.tareasOtras.some((x) => x.trim())) {
         toast('Contá qué encontraste o qué hiciste antes de armar el informe', 3200); return;
       }
       inf.generado = stampISO(); guardarTrabajo(t);
-      const ok = await compartirInforme(t);
-      if (ok && t.estado !== 'entregado') ofrecerEntregado(t);
+      verInforme(t, (ok) => { if (ok && t.estado !== 'entregado') ofrecerEntregado(t); });
     } });
 
     main.append(el('div', { class: 'wrap form' },

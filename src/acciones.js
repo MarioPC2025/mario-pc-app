@@ -9,6 +9,7 @@ import { armarInformePdf } from './render/informePdf.js';
 import { compartirArchivo, abrirWhatsApp } from './files.js';
 import { imprimir, mensajeError, elegirImpresora } from './printer.js';
 import { hoja } from './nav.js';
+import { verPdf } from './preview.js';
 
 export async function lienzoEtiqueta(t) {
   await Promise.all([fuentesListas(), prepararLogos()]);
@@ -113,9 +114,19 @@ export function nombreInforme(t) {
 }
 export function pdfInforme(t) { return armarInformePdf(datosInforme(t)); }
 
-export async function compartirInforme(t) {
-  const blob = pdfInforme(t);
-  return compartirArchivo(blob, nombreInforme(t), { titulo: 'Informe técnico N° ' + t.orden });
+// Vista previa del informe. despues(ok): se llama después de compartir (ok = se compartió).
+export function verInforme(t, despues) {
+  const blob = pdfInforme(t), nombre = nombreInforme(t);
+  verPdf(blob, {
+    titulo: 'Informe técnico', sub: 'Orden N° ' + t.orden + (t.cliente.nombre.trim() ? ' · ' + t.cliente.nombre.trim() : ''),
+    acciones: [
+      { text: 'Mensaje', onclick: () => abrirWhatsApp(t.cliente.tel, mensajeInforme(t)) },
+      { text: 'Compartir PDF', primary: true, onclick: async () => {
+        const ok = await compartirArchivo(blob, nombre, { titulo: 'Informe técnico N° ' + t.orden });
+        if (despues) despues(ok);
+      } },
+    ],
+  });
 }
 
 /* ---------- Mensajes de WhatsApp ---------- */

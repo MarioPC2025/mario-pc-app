@@ -4,7 +4,7 @@ import { el, fmt, fechaFmt, haceCuanto, botonConfirmar, toast, diaCorto } from '
 import { db, trabajoPorId, guardarTrabajo, borrarTrabajo } from '../store.js';
 import { ESTADOS, equipoNombre, claveNombre, RESULTADOS } from '../catalog.js';
 import { accList, danoList } from '../render/recepcion.js';
-import { imprimirEtiqueta, compartirComprobante, compartirEtiqueta, compartirInforme, avisarListo, mensajeInforme } from '../acciones.js';
+import { imprimirEtiqueta, compartirComprobante, compartirEtiqueta, verInforme, avisarListo, mensajeInforme } from '../acciones.js';
 import { abrirWhatsApp, llamar } from '../files.js';
 import { ir, atras, setTitulo, setAcciones, hoja } from '../nav.js';
 
@@ -80,7 +80,7 @@ export const vistaTrabajo = {
         fila('Entregado', fechaFmt(t.informe.fechaEntrega)),
         t.informe.total != null ? fila('Importe', fmt(t.informe.total)) : null,
         el('div', { class: 'row-btns' },
-          el('button', { type: 'button', class: 'btn small primary', text: 'Compartir PDF', onclick: () => compartirInforme(t) }),
+          el('button', { type: 'button', class: 'btn small primary', text: 'Ver PDF', onclick: () => verInforme(t) }),
           el('button', { type: 'button', class: 'btn small', text: 'Mensaje al cliente', onclick: () => abrirWhatsApp(t.cliente.tel, mensajeInforme(t)) }))));
     }
 
