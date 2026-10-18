@@ -16,6 +16,11 @@ mkdirSync('www/fonts', { recursive: true });
 cpSync('web', 'www', { recursive: true });
 for (const [dst, src] of Object.entries(fuentes)) copyFileSync('node_modules/' + src, 'www/fonts/' + dst);
 
+// pdf.js para la vista previa de los PDF: se carga aparte, recién cuando se abre una vista previa
+mkdirSync('www/pdfjs', { recursive: true });
+for (const f of ['pdf.min.mjs', 'pdf.worker.min.mjs']) copyFileSync('node_modules/pdfjs-dist/legacy/build/' + f, 'www/pdfjs/' + f);
+cpSync('node_modules/pdfjs-dist/standard_fonts', 'www/pdfjs/standard_fonts', { recursive: true });
+
 const version = '1.0.' + (process.env.GITHUB_RUN_NUMBER || '0');
 await build({
   entryPoints: ['src/main.js'],

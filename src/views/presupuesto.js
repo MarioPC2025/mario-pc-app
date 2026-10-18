@@ -6,6 +6,7 @@ import { EQUIPOS, SERVICIOS, equipoNombre } from '../catalog.js';
 import { armarPresupuestoPdf } from '../render/presupuestoPdf.js';
 import { compartirArchivo, abrirWhatsApp, copiar } from '../files.js';
 import { ir, setTitulo, setAcciones } from '../nav.js';
+import { verPdf } from '../preview.js';
 
 let q = nuevo();
 let modo = 'nuevo';
@@ -204,7 +205,7 @@ function editor(wrap, pintar) {
   const resumen = el('section', { class: 'panel', id: 'resumen' }, el('h2', { text: 'Resumen' }), lines, el('div', { class: 'total' }, totalLbl, totalEl), falta);
 
   const nombreArchivo = () => limpiarNombreArchivo('Presupuesto Mario PC' + (q.nombre.trim() ? ' - ' + q.nombre.trim() : '') + ' ' + todayISO()) + '.pdf';
-  async function pdf() {
+  function pdf() {
     const b = construir();
     if (!b.lines.length) { toast('Elegí un servicio o sumá ítems antes de armar el PDF.'); return; }
     const p = guardarActual();
@@ -215,7 +216,11 @@ function editor(wrap, pintar) {
       lines: b.lines, total: b.total, missing: b.missing, validez: v, garantia: garantiaTexto(),
       pagos: db.cfg.presupuesto.pagos.trim(), whatsapp: n.wsp.trim(), ig: n.ig.trim(), web: n.web.trim(),
     });
-    await compartirArchivo(blob, nombreArchivo(), { titulo: 'Presupuesto' });
+    const archivo = nombreArchivo();
+    verPdf(blob, {
+      titulo: 'Presupuesto', sub: 'N° ' + p.numero + (q.nombre.trim() ? ' · ' + q.nombre.trim() : ''),
+      acciones: [{ text: 'Compartir PDF', primary: true, onclick: () => compartirArchivo(blob, archivo, { titulo: 'Presupuesto' }) }],
+    });
   }
   function aRecepcion() {
     const b = construir();
@@ -248,7 +253,7 @@ function editor(wrap, pintar) {
     el('section', { class: 'msgbox' }, el('label', { class: 'lbl', text: 'Mensaje' }), ta, reset,
       el('div', { class: 'actions' },
         el('button', { type: 'button', class: 'btn', text: 'Copiar', onclick: () => copiar(ta.value) }),
-        el('button', { type: 'button', class: 'btn', text: 'PDF', onclick: pdf }),
+        el('button', { type: 'button', class: 'btn', text: 'Ver PDF', onclick: pdf }),
         el('button', { type: 'button', class: 'btn primary wa', text: 'Mandar por WhatsApp', onclick: () => { if (construir().lines.length) guardarActual(); abrirWhatsApp(q.tel, ta.value); } })),
       el('button', { type: 'button', class: 'btn ok-ghost wide', text: 'Lo aprobó: pasar a recepción', onclick: aRecepcion }),
       el('p', { class: 'hint', text: 'Al mandarlo o armar el PDF, queda en Guardados para retomarlo después.' })),
