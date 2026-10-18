@@ -83,11 +83,15 @@ export async function compartirEtiqueta(t) {
 }
 
 /* ---------- Comprobante A4 ---------- */
-export async function compartirComprobante(t) {
+// Vista previa del comprobante, con el botón para compartirlo
+export async function verComprobante(t) {
   toast('Armando el comprobante…', 1500);
   const pdf = await canvasToPdf(await lienzoComprobante(t));
   const nombre = limpiarNombreArchivo('Comprobante Mario PC N° ' + t.orden + (t.cliente.nombre ? ' - ' + t.cliente.nombre : '')) + '.pdf';
-  await compartirArchivo(pdf, nombre, { titulo: 'Comprobante de recepción N° ' + t.orden });
+  verPdf(pdf, {
+    titulo: 'Comprobante', sub: 'Orden N° ' + t.orden + (t.cliente.nombre.trim() ? ' · ' + t.cliente.nombre.trim() : ''),
+    acciones: [{ text: 'Compartir PDF', primary: true, onclick: () => compartirArchivo(pdf, nombre, { titulo: 'Comprobante de recepción N° ' + t.orden }) }],
+  });
 }
 
 /* ---------- Informe técnico ---------- */

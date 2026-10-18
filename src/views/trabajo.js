@@ -4,7 +4,7 @@ import { el, fmt, fechaFmt, haceCuanto, botonConfirmar, toast, diaCorto } from '
 import { db, trabajoPorId, guardarTrabajo, borrarTrabajo } from '../store.js';
 import { ESTADOS, equipoNombre, claveNombre, RESULTADOS } from '../catalog.js';
 import { accList, danoList } from '../render/recepcion.js';
-import { imprimirEtiqueta, compartirComprobante, compartirEtiqueta, verInforme, avisarListo, mensajeInforme } from '../acciones.js';
+import { imprimirEtiqueta, verComprobante, compartirEtiqueta, verInforme, avisarListo, mensajeInforme } from '../acciones.js';
 import { abrirWhatsApp, llamar } from '../files.js';
 import { ir, atras, setTitulo, setAcciones, hoja } from '../nav.js';
 
@@ -67,7 +67,7 @@ export const vistaTrabajo = {
     const tieneInforme = t.informe && t.informe.generado;
     wrap.append(el('div', { class: 'acts' },
       btnEtiqueta,
-      el('button', { type: 'button', class: 'act', onclick: () => compartirComprobante(t) }, el('span', { class: 'act-i', text: '⎙' }), 'Comprobante A4'),
+      el('button', { type: 'button', class: 'act', onclick: () => verComprobante(t) }, el('span', { class: 'act-i', text: '⎙' }), 'Comprobante A4'),
       el('button', { type: 'button', class: 'act', onclick: () => ir('informe', { id: t.id }) }, el('span', { class: 'act-i', text: '✓' }), tieneInforme ? 'Ver informe' : 'Armar informe'),
       el('button', { type: 'button', class: 'act', onclick: () => avisarListo(t) }, el('span', { class: 'act-i', text: '✆' }), 'Avisar que está listo')));
     wrap.append(el('button', { type: 'button', class: 'linkbtn', text: '¿No imprime? Mandar la etiqueta a la app de Phomemo', onclick: () => compartirEtiqueta(t) }));
