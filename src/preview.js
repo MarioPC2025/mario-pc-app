@@ -43,6 +43,7 @@ export async function verPdf(blob, { titulo = 'Vista previa', sub = '', acciones
     cerrado = true;
     document.removeEventListener('mpc-back', onBack);
     window.removeEventListener('resize', onResize);
+    if (vv) { vv.removeEventListener('resize', onResize); vv.removeEventListener('scroll', encajar); }
     caja.remove();
     if (tarea) tarea.destroy().catch(() => {});
   }
@@ -51,12 +52,27 @@ export async function verPdf(blob, { titulo = 'Vista previa', sub = '', acciones
     if (document.querySelector('.sheet-bg')) return;
     e.preventDefault(); cerrar();
   }
+  // Seguro: la vista previa ocupa exactamente la parte visible de la pantalla. En algunos celulares, si algo de
+  // la pantalla de atrás se sale por el costado, Chrome agranda el área de la app y la barra de botones quedaba
+  // fuera de la pantalla.
+  const vv = window.visualViewport;
+  let anchoAnterior = 0;
+  function encajar() {
+    if (!vv) return;
+    Object.assign(caja.style, { left: vv.offsetLeft + 'px', top: vv.offsetTop + 'px', width: vv.width + 'px', height: vv.height + 'px', right: 'auto', bottom: 'auto' });
+  }
   let tResize = null;
-  function onResize() { clearTimeout(tResize); tResize = setTimeout(() => { if (doc) dibujar(); }, 200); }
+  function onResize() {
+    encajar();
+    clearTimeout(tResize);
+    tResize = setTimeout(() => { if (doc && scroller.clientWidth !== anchoAnterior) dibujar(); }, 200);
+  }
 
   document.body.append(caja);
+  encajar();
   document.addEventListener('mpc-back', onBack);
   window.addEventListener('resize', onResize);
+  if (vv) { vv.addEventListener('resize', onResize); vv.addEventListener('scroll', encajar); }
 
   function setZoom(z) {
     z = Math.max(0, Math.min(ZOOMS.length - 1, z));
@@ -83,6 +99,7 @@ export async function verPdf(blob, { titulo = 'Vista previa', sub = '', acciones
 
   async function dibujar() {
     const v = ++version;
+    anchoAnterior = scroller.clientWidth;
     const ancho = Math.max(200, scroller.clientWidth - 24);
     const dpr = window.devicePixelRatio || 1;
     for (let i = 1; i <= doc.numPages; i++) {

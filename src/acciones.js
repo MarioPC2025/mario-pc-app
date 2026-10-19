@@ -83,12 +83,21 @@ export async function compartirEtiqueta(t) {
 }
 
 /* ---------- Comprobante A4 ---------- */
+async function pdfComprobante(t) {
+  const pdf = await canvasToPdf(await lienzoComprobante(t));
+  const nombre = limpiarNombreArchivo('Comprobante Mario PC N° ' + t.orden + (t.cliente.nombre ? ' - ' + t.cliente.nombre : '')) + '.pdf';
+  return { pdf, nombre, titulo: 'Comprobante de recepción N° ' + t.orden };
+}
+// Manda el comprobante por WhatsApp directo, sin vista previa
+export async function enviarComprobante(t) {
+  toast('Armando el comprobante…', 1500);
+  const { pdf, nombre, titulo } = await pdfComprobante(t);
+  return mandarPorWhatsApp(pdf, nombre, { tel: t.cliente.tel, texto: mensajeComprobante(t), titulo });
+}
 // Vista previa del comprobante, con los botones para mandarlo por WhatsApp o compartirlo
 export async function verComprobante(t) {
   toast('Armando el comprobante…', 1500);
-  const pdf = await canvasToPdf(await lienzoComprobante(t));
-  const nombre = limpiarNombreArchivo('Comprobante Mario PC N° ' + t.orden + (t.cliente.nombre ? ' - ' + t.cliente.nombre : '')) + '.pdf';
-  const titulo = 'Comprobante de recepción N° ' + t.orden;
+  const { pdf, nombre, titulo } = await pdfComprobante(t);
   verPdf(pdf, {
     titulo: 'Comprobante', sub: 'Orden N° ' + t.orden + (t.cliente.nombre.trim() ? ' · ' + t.cliente.nombre.trim() : ''),
     acciones: [

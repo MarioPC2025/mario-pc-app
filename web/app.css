@@ -23,7 +23,9 @@
   color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--fg)}
+html,body{margin:0;background:var(--bg);color:var(--fg);overflow-x:clip}
+/* overflow-x:clip: si algo se sale por el costado, Chrome en Android agranda toda la pantalla de la app
+   y lo que es fijo (barras, vista previa) queda más grande que el celular */
 html{scroll-padding-top:calc(var(--appbar) + var(--sat) + 8px);scroll-padding-bottom:calc(var(--tabbar) + var(--sab) + 80px)}
 body{font:400 16px/1.5 var(--f-body);-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent;
   padding-top:calc(var(--appbar) + var(--sat));padding-bottom:calc(var(--tabbar) + var(--sab));min-height:100vh;opacity:0;transition:opacity .15s}
