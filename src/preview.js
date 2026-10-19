@@ -18,7 +18,9 @@ async function cargarPdfjs() {
 }
 
 // Muestra el PDF. `acciones`: [{ text, primary, onclick(cerrar) }] para la barra de abajo.
-export async function verPdf(blob, { titulo = 'Vista previa', sub = '', acciones = [] } = {}) {
+// `opcion` (opcional): { texto, valor, alCambiar(valor) -> Promise<Blob> } agrega un check arriba de la barra;
+// al tocarlo se pide el PDF nuevo y se redibuja.
+export async function verPdf(blob, { titulo = 'Vista previa', sub = '', acciones = [], opcion = null } = {}) {
   let zoom = 0, doc = null, tarea = null, cerrado = false, version = 0;
 
   const paginas = el('div', { class: 'pv-pages' });
@@ -34,6 +36,15 @@ export async function verPdf(blob, { titulo = 'Vista previa', sub = '', acciones
       el('div', { class: 'pv-t' }, el('h2', { text: titulo }), subEl),
       el('div', { class: 'pv-zoom' }, menos, lblZoom, mas)),
     scroller,
+    opcion ? el('label', { class: 'pv-opt' },
+      el('input', { type: 'checkbox', checked: !!opcion.valor, onchange: async (e) => {
+        const chk = e.target;
+        chk.disabled = true;
+        try { await abrir(await opcion.alCambiar(chk.checked)); }
+        catch (err) { console.error(err); chk.checked = !chk.checked; toast('No se pudo actualizar el PDF'); }
+        chk.disabled = false;
+      } }),
+      el('span', { text: opcion.texto })) : null,
     el('div', { class: 'pv-bar' }, ...acciones.map((a) => el('button', {
       type: 'button', class: 'btn' + (a.primary ? ' primary' : ''), text: a.text, onclick: () => a.onclick(cerrar),
     }))));
@@ -120,21 +131,28 @@ export async function verPdf(blob, { titulo = 'Vista previa', sub = '', acciones
     }
   }
 
-  try {
-    const { lib, base } = await cargarPdfjs();
-    if (cerrado) return;
-    const data = new Uint8Array(await blob.arrayBuffer());
-    tarea = lib.getDocument({ data, standardFontDataUrl: base + 'standard_fonts/', useSystemFonts: false, isEvalSupported: false });
-    doc = await tarea.promise;
-    if (cerrado) return;
-    const n = doc.numPages;
-    subEl.textContent = [sub, n + (n === 1 ? ' página' : ' páginas')].filter(Boolean).join(' · ');
-    await dibujar();
-  } catch (e) {
-    if (cerrado) return;
-    console.error(e);
-    scroller.replaceChildren(el('p', { class: 'pv-msg', text: 'No se pudo mostrar la vista previa. Igual podés compartir el PDF desde acá abajo.' }));
-    toast('No se pudo mostrar la vista previa');
+  // Carga un PDF y lo dibuja (también se usa al cambiar la opción de arriba de la barra)
+  async function abrir(b) {
+    try {
+      const { lib, base } = await cargarPdfjs();
+      if (cerrado) return;
+      const data = new Uint8Array(await b.arrayBuffer());
+      const nueva = lib.getDocument({ data, standardFontDataUrl: base + 'standard_fonts/', useSystemFonts: false, isEvalSupported: false });
+      const nd = await nueva.promise;
+      if (cerrado) { nueva.destroy().catch(() => {}); return; }
+      const vieja = tarea;
+      tarea = nueva; doc = nd;
+      if (vieja) vieja.destroy().catch(() => {});
+      const n = doc.numPages;
+      subEl.textContent = [sub, n + (n === 1 ? ' página' : ' páginas')].filter(Boolean).join(' · ');
+      await dibujar();
+    } catch (e) {
+      if (cerrado) return;
+      console.error(e);
+      scroller.replaceChildren(el('p', { class: 'pv-msg', text: 'No se pudo mostrar la vista previa. Igual podés compartir el PDF desde acá abajo.' }));
+      toast('No se pudo mostrar la vista previa');
+    }
   }
+  await abrir(blob);
   return cerrar;
 }

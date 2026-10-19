@@ -303,4 +303,6 @@ body[data-vista="informe"] .bar .btn:first-child{flex:none}
 .pv-msg{padding:48px 24px;text-align:center;color:var(--muted)}
 .pv-bar{flex:none;position:relative;z-index:1;display:flex;gap:12px;padding:10px 16px calc(10px + var(--sab));background:var(--surface-2);border-top:1px solid var(--line-strong)}
 .pv-bar .btn{flex:1}
+.pv-opt{flex:none;display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--surface-2);border-top:1px solid var(--line-strong);font-size:15px}
+.pv-opt input{width:22px;height:22px;margin:0;accent-color:var(--accent,currentColor)}
 @media (prefers-reduced-motion:reduce){.pv{animation:none}}

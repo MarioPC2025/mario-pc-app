@@ -135,7 +135,7 @@ export function rotarParaImpresora(src, antihorario) {
 /* ---------- Comprobante A4 (200 dpi) ---------- */
 const AVISO = 'Antes de dejar el equipo, hacé una copia de seguridad (backup) de tus archivos. Mario PC no se hace responsable por la pérdida de información guardada en el equipo. Si el trabajo requiere formatear, reinstalar el sistema o cambiar el disco, los datos pueden perderse.';
 
-function drawA4(t, cfg, k) {
+function drawA4(t, cfg, k, firmas = true) {
   const PW = 1654, PH = 2339, u = PW / 210;
   const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
   const c = cv.getContext('2d');
@@ -224,12 +224,14 @@ function drawA4(t, cfg, k) {
   y += ah + mm(4 * k);
   const g = cfg.negocio.garantiaDias;
   if (g > 0) { F('700', 4.2, FD, k); c.fillText('Garantía: ' + g + (g == 1 ? ' día' : ' días') + ' sobre el trabajo realizado.', X, y + mm(3.5 * k)); y += mm(6 * k); }
-  const overflow = y > sigTop - mm(8);
-  // firmas
+  // sin firmas el contenido puede bajar hasta el pie
+  const overflow = y > (firmas ? sigTop : PH - mm(24)) - mm(8);
   c.fillStyle = '#000';
-  const sw = mm(78);
-  c.fillRect(X, sigTop, sw, 2); c.fillRect(PW - X - sw, sigTop, sw, 2);
-  F('700', 3, FM); c.fillText('FIRMA Y ACLARACIÓN DEL CLIENTE', X, sigTop + mm(5)); c.fillText('MARIO PC', PW - X - sw, sigTop + mm(5));
+  if (firmas) {
+    const sw = mm(78);
+    c.fillRect(X, sigTop, sw, 2); c.fillRect(PW - X - sw, sigTop, sw, 2);
+    F('700', 3, FM); c.fillText('FIRMA Y ACLARACIÓN DEL CLIENTE', X, sigTop + mm(5)); c.fillText('MARIO PC', PW - X - sw, sigTop + mm(5));
+  }
   // pie
   c.fillRect(X, PH - mm(24), CW, 2);
   const n = cfg.negocio, contacto = [];
@@ -241,8 +243,9 @@ function drawA4(t, cfg, k) {
   return { cv, overflow };
 }
 
-export function renderA4(t, cfg) {
+// opts.firmas (por defecto true): dibuja o no los campos de firma del cliente y de Mario PC
+export function renderA4(t, cfg, { firmas = true } = {}) {
   let r = null;
-  for (const k of [1, 0.94, 0.88, 0.82, 0.76]) { r = drawA4(t, cfg, k); if (!r.overflow) break; }
+  for (const k of [1, 0.94, 0.88, 0.82, 0.76]) { r = drawA4(t, cfg, k, firmas); if (!r.overflow) break; }
   return r.cv;
 }

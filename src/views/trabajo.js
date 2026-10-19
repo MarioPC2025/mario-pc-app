@@ -70,7 +70,7 @@ export const vistaTrabajo = {
       el('button', { type: 'button', class: 'act', onclick: () => verComprobante(t) }, el('span', { class: 'act-i', text: '⎙' }), 'Comprobante A4'),
       el('button', { type: 'button', class: 'act', onclick: () => ir('informe', { id: t.id }) }, el('span', { class: 'act-i', text: '✓' }), tieneInforme ? 'Ver informe' : 'Armar informe'),
       el('button', { type: 'button', class: 'act', onclick: () => avisarListo(t) }, el('span', { class: 'act-i', text: '✆' }), 'Avisar que está listo')));
-    wrap.append(el('button', { type: 'button', class: 'linkbtn', text: 'Mandar el comprobante por WhatsApp, sin vista previa', onclick: () => enviarComprobante(t) }));
+    wrap.append(el('button', { type: 'button', class: 'linkbtn', text: 'Mandar el comprobante por WhatsApp (sin firmas), sin vista previa', onclick: () => enviarComprobante(t) }));
     wrap.append(el('button', { type: 'button', class: 'linkbtn', text: '¿No imprime? Mandar la etiqueta a la app de Phomemo', onclick: () => compartirEtiqueta(t) }));
 
     // Informe

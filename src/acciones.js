@@ -15,9 +15,9 @@ export async function lienzoEtiqueta(t) {
   await Promise.all([fuentesListas(), prepararLogos()]);
   return drawLabel(t, db.cfg);
 }
-export async function lienzoComprobante(t) {
+export async function lienzoComprobante(t, opts) {
   await Promise.all([fuentesListas(), prepararLogos()]);
-  return renderA4(t, db.cfg);
+  return renderA4(t, db.cfg, opts);
 }
 
 /* ---------- Etiqueta ---------- */
@@ -83,26 +83,28 @@ export async function compartirEtiqueta(t) {
 }
 
 /* ---------- Comprobante A4 ---------- */
-async function pdfComprobante(t) {
-  const pdf = await canvasToPdf(await lienzoComprobante(t));
+async function pdfComprobante(t, { firmas = true } = {}) {
+  const pdf = await canvasToPdf(await lienzoComprobante(t, { firmas }));
   const nombre = limpiarNombreArchivo('Comprobante Mario PC N° ' + t.orden + (t.cliente.nombre ? ' - ' + t.cliente.nombre : '')) + '.pdf';
   return { pdf, nombre, titulo: 'Comprobante de recepción N° ' + t.orden };
 }
-// Manda el comprobante por WhatsApp directo, sin vista previa
+// Manda el comprobante por WhatsApp directo, sin vista previa. Va sin campos de firma (es la copia digital).
 export async function enviarComprobante(t) {
   toast('Armando el comprobante…', 1500);
-  const { pdf, nombre, titulo } = await pdfComprobante(t);
+  const { pdf, nombre, titulo } = await pdfComprobante(t, { firmas: false });
   return mandarPorWhatsApp(pdf, nombre, { tel: t.cliente.tel, texto: mensajeComprobante(t), titulo });
 }
-// Vista previa del comprobante, con los botones para mandarlo por WhatsApp o compartirlo
+// Vista previa del comprobante, con los botones para mandarlo por WhatsApp o compartirlo.
+// El check "Con firmas" agrega o saca los campos de firma (empieza tildado, para imprimir).
 export async function verComprobante(t) {
   toast('Armando el comprobante…', 1500);
-  const { pdf, nombre, titulo } = await pdfComprobante(t);
-  verPdf(pdf, {
+  let actual = await pdfComprobante(t, { firmas: true });
+  verPdf(actual.pdf, {
     titulo: 'Comprobante', sub: 'Orden N° ' + t.orden + (t.cliente.nombre.trim() ? ' · ' + t.cliente.nombre.trim() : ''),
+    opcion: { texto: 'Con campos de firma', valor: true, alCambiar: async (firmas) => { actual = await pdfComprobante(t, { firmas }); return actual.pdf; } },
     acciones: [
-      { text: 'Compartir', onclick: () => compartirArchivo(pdf, nombre, { titulo }) },
-      { text: 'WhatsApp', primary: true, onclick: () => mandarPorWhatsApp(pdf, nombre, { tel: t.cliente.tel, texto: mensajeComprobante(t), titulo }) },
+      { text: 'Compartir', onclick: () => compartirArchivo(actual.pdf, actual.nombre, { titulo: actual.titulo }) },
+      { text: 'WhatsApp', primary: true, onclick: () => mandarPorWhatsApp(actual.pdf, actual.nombre, { tel: t.cliente.tel, texto: mensajeComprobante(t), titulo: actual.titulo }) },
     ],
   });
 }
