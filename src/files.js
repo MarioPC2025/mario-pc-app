@@ -1,6 +1,6 @@
 // Compartir archivos (PDF, imágenes, respaldo) y abrir WhatsApp.
 
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { waNumber, toast } from './util.js';
@@ -40,6 +40,30 @@ export async function compartirTexto(texto, titulo = '') {
     return;
   }
   try { await Share.share({ text: texto, title: titulo, dialogTitle: titulo || 'Compartir' }); } catch (e) {}
+}
+
+// Plugin nativo propio (android/.../WhatsAppPlugin.java): manda el archivo directo a WhatsApp
+const WhatsApp = registerPlugin('WhatsApp');
+
+// Qué WhatsApp hay instalado: { whatsapp, business }
+export async function appsWhatsApp() {
+  if (!NATIVE) return { whatsapp: false, business: false };
+  try { return await WhatsApp.disponibles(); } catch (e) { return { whatsapp: false, business: false }; }
+}
+
+// Manda el archivo a WhatsApp (app = 'com.whatsapp' o 'com.whatsapp.w4b'), al chat del cliente si hay número.
+// Si algo falla, abre el menú "Compartir" de siempre. Devuelve true si se mandó.
+export async function enviarArchivoWhatsApp(blob, nombre, { app = 'com.whatsapp', tel = '', texto = '', titulo = '' } = {}) {
+  if (!NATIVE) { descargarEnNavegador(blob, nombre); return true; }
+  try {
+    const data = await blobABase64(blob);
+    const w = await Filesystem.writeFile({ path: 'compartir/' + nombre, data, directory: Directory.Cache, recursive: true });
+    await WhatsApp.enviarArchivo({ uri: w.uri, app, numero: waNumber(tel), texto, tipo: blob.type || 'application/pdf' });
+    return true;
+  } catch (e) {
+    console.error(e);
+    return compartirArchivo(blob, nombre, { titulo, texto });
+  }
 }
 
 function descargarEnNavegador(blob, nombre) {

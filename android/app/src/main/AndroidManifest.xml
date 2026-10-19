@@ -36,6 +36,12 @@
         </provider>
     </application>
 
+    <!-- Para poder mandar archivos directo a WhatsApp (Android 11+ esconde las otras apps si no se declaran) -->
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+    </queries>
+
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />

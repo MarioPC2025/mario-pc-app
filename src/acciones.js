@@ -6,7 +6,7 @@ import { RESULTADOS, equipoNombre } from './catalog.js';
 import { prepararLogos, drawLabel, rotarParaImpresora, renderA4, equipoTexto } from './render/recepcion.js';
 import { canvasToPdf, toBlobP, fuentesListas } from './render/canvas.js';
 import { armarInformePdf } from './render/informePdf.js';
-import { compartirArchivo, abrirWhatsApp } from './files.js';
+import { compartirArchivo, abrirWhatsApp, appsWhatsApp, enviarArchivoWhatsApp } from './files.js';
 import { imprimir, mensajeError, elegirImpresora } from './printer.js';
 import { hoja } from './nav.js';
 import { verPdf } from './preview.js';
@@ -83,15 +83,38 @@ export async function compartirEtiqueta(t) {
 }
 
 /* ---------- Comprobante A4 ---------- */
-// Vista previa del comprobante, con el botón para compartirlo
+// Vista previa del comprobante, con los botones para mandarlo por WhatsApp o compartirlo
 export async function verComprobante(t) {
   toast('Armando el comprobante…', 1500);
   const pdf = await canvasToPdf(await lienzoComprobante(t));
   const nombre = limpiarNombreArchivo('Comprobante Mario PC N° ' + t.orden + (t.cliente.nombre ? ' - ' + t.cliente.nombre : '')) + '.pdf';
+  const titulo = 'Comprobante de recepción N° ' + t.orden;
   verPdf(pdf, {
     titulo: 'Comprobante', sub: 'Orden N° ' + t.orden + (t.cliente.nombre.trim() ? ' · ' + t.cliente.nombre.trim() : ''),
-    acciones: [{ text: 'Compartir PDF', primary: true, onclick: () => compartirArchivo(pdf, nombre, { titulo: 'Comprobante de recepción N° ' + t.orden }) }],
+    acciones: [
+      { text: 'Compartir', onclick: () => compartirArchivo(pdf, nombre, { titulo }) },
+      { text: 'WhatsApp', primary: true, onclick: () => mandarPorWhatsApp(pdf, nombre, { tel: t.cliente.tel, texto: mensajeComprobante(t), titulo }) },
+    ],
   });
+}
+
+/* ---------- Mandar un PDF por WhatsApp ---------- */
+// Si están instaladas las dos (WhatsApp y WhatsApp Business), pregunta con cuál.
+export async function mandarPorWhatsApp(blob, nombre, opts) {
+  const a = await appsWhatsApp();
+  if (a.whatsapp && a.business) {
+    // Si cierra la hoja sin elegir, la promesa queda sin resolver y no pasa nada
+    return new Promise((fin) => {
+      const con = (app) => (cerrar) => { cerrar(); fin(enviarArchivoWhatsApp(blob, nombre, { ...opts, app })); };
+      hoja('¿Con cuál WhatsApp?', (cerrar) => [
+        el('div', { class: 'stack' },
+          el('button', { type: 'button', class: 'btn primary', text: 'WhatsApp Business', onclick: () => con('com.whatsapp.w4b')(cerrar) }),
+          el('button', { type: 'button', class: 'btn', text: 'WhatsApp', onclick: () => con('com.whatsapp')(cerrar) })),
+      ]);
+    });
+  }
+  if (a.whatsapp || a.business) return enviarArchivoWhatsApp(blob, nombre, { ...opts, app: a.business ? 'com.whatsapp.w4b' : 'com.whatsapp' });
+  return compartirArchivo(blob, nombre, { titulo: opts.titulo, texto: opts.texto }); // sin WhatsApp (o en el navegador)
 }
 
 /* ---------- Informe técnico ---------- */
@@ -124,9 +147,12 @@ export function verInforme(t, despues) {
   verPdf(blob, {
     titulo: 'Informe técnico', sub: 'Orden N° ' + t.orden + (t.cliente.nombre.trim() ? ' · ' + t.cliente.nombre.trim() : ''),
     acciones: [
-      { text: 'Mensaje', onclick: () => abrirWhatsApp(t.cliente.tel, mensajeInforme(t)) },
-      { text: 'Compartir PDF', primary: true, onclick: async () => {
+      { text: 'Compartir', onclick: async () => {
         const ok = await compartirArchivo(blob, nombre, { titulo: 'Informe técnico N° ' + t.orden });
+        if (despues) despues(ok);
+      } },
+      { text: 'WhatsApp', primary: true, onclick: async () => {
+        const ok = await mandarPorWhatsApp(blob, nombre, { tel: t.cliente.tel, texto: mensajeInforme(t), titulo: 'Informe técnico N° ' + t.orden });
         if (despues) despues(ok);
       } },
     ],
@@ -147,6 +173,11 @@ export function mensajeListo(t) {
   L.push('Avisame qué día y horario te queda cómodo y coordinamos.');
   L.push('', 'Mario PC');
   return L.join('\n');
+}
+export function mensajeComprobante(t) {
+  const nom = primerNombre(t);
+  return (nom ? 'Hola ' + nom + '! ' : 'Hola! ') + 'Te paso el comprobante de recepción de tu ' + equipoCorto(t) +
+    ' (orden N° ' + t.orden + '). Guardalo para cuando vengas a retirarlo. Cualquier duda, escribime.\n\nMario PC';
 }
 export function mensajeInforme(t) {
   const nom = primerNombre(t);
