@@ -110,22 +110,12 @@ export async function verComprobante(t) {
 }
 
 /* ---------- Mandar un PDF por WhatsApp ---------- */
-// Si están instaladas las dos (WhatsApp y WhatsApp Business), pregunta con cuál.
+// Siempre con WhatsApp Business (el WhatsApp personal no se usa para Mario PC).
 export async function mandarPorWhatsApp(blob, nombre, opts) {
   const a = await appsWhatsApp();
-  if (a.whatsapp && a.business) {
-    // Si cierra la hoja sin elegir, la promesa queda sin resolver y no pasa nada
-    return new Promise((fin) => {
-      const con = (app) => (cerrar) => { cerrar(); fin(enviarArchivoWhatsApp(blob, nombre, { ...opts, app })); };
-      hoja('¿Con cuál WhatsApp?', (cerrar) => [
-        el('div', { class: 'stack' },
-          el('button', { type: 'button', class: 'btn primary', text: 'WhatsApp Business', onclick: () => con('com.whatsapp.w4b')(cerrar) }),
-          el('button', { type: 'button', class: 'btn', text: 'WhatsApp', onclick: () => con('com.whatsapp')(cerrar) })),
-      ]);
-    });
-  }
-  if (a.whatsapp || a.business) return enviarArchivoWhatsApp(blob, nombre, { ...opts, app: a.business ? 'com.whatsapp.w4b' : 'com.whatsapp' });
-  return compartirArchivo(blob, nombre, { titulo: opts.titulo, texto: opts.texto }); // sin WhatsApp (o en el navegador)
+  if (a.business) return enviarArchivoWhatsApp(blob, nombre, opts);
+  if (a.whatsapp) toast('No encontré WhatsApp Business: elegí a dónde mandarlo', 3500);
+  return compartirArchivo(blob, nombre, { titulo: opts.titulo, texto: opts.texto }); // sin Business (o en el navegador)
 }
 
 /* ---------- Informe técnico ---------- */

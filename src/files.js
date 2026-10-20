@@ -51,14 +51,14 @@ export async function appsWhatsApp() {
   try { return await WhatsApp.disponibles(); } catch (e) { return { whatsapp: false, business: false }; }
 }
 
-// Manda el archivo a WhatsApp (app = 'com.whatsapp' o 'com.whatsapp.w4b'), al chat del cliente si hay número.
+// Manda el archivo a WhatsApp Business (Mario PC usa solo Business), al chat del cliente si hay número.
 // Si algo falla, abre el menú "Compartir" de siempre. Devuelve true si se mandó.
-export async function enviarArchivoWhatsApp(blob, nombre, { app = 'com.whatsapp', tel = '', texto = '', titulo = '' } = {}) {
+export async function enviarArchivoWhatsApp(blob, nombre, { tel = '', texto = '', titulo = '' } = {}) {
   if (!NATIVE) { descargarEnNavegador(blob, nombre); return true; }
   try {
     const data = await blobABase64(blob);
     const w = await Filesystem.writeFile({ path: 'compartir/' + nombre, data, directory: Directory.Cache, recursive: true });
-    await WhatsApp.enviarArchivo({ uri: w.uri, app, numero: waNumber(tel), texto, tipo: blob.type || 'application/pdf' });
+    await WhatsApp.enviarArchivo({ uri: w.uri, app: 'com.whatsapp.w4b', numero: waNumber(tel), texto, tipo: blob.type || 'application/pdf' });
     return true;
   } catch (e) {
     console.error(e);
@@ -79,9 +79,18 @@ export function abrirUrl(url) {
   else window.open(url, '_blank', 'noopener');
 }
 
-// Abre el chat de WhatsApp con el cliente y el texto ya escrito
-export function abrirWhatsApp(tel, texto) {
+// Abre el chat de WhatsApp Business con el cliente y el texto ya escrito.
+// En el teléfono va directo a Business; si no está instalado, avisa. En el navegador usa wa.me.
+export async function abrirWhatsApp(tel, texto) {
   const n = waNumber(tel);
+  if (NATIVE) {
+    try { await WhatsApp.abrirChat({ numero: n, texto: texto || '' }); return; }
+    catch (e) {
+      console.error(e);
+      toast(e && e.code === 'NO_WHATSAPP' ? 'No encontré WhatsApp Business en el teléfono' : 'No se pudo abrir WhatsApp Business', 4000);
+      return;
+    }
+  }
   const url = (n ? 'https://wa.me/' + n : 'https://wa.me/') + (texto ? '?text=' + encodeURIComponent(texto) : '');
   abrirUrl(url);
 }

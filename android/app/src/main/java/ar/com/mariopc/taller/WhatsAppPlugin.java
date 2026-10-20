@@ -43,11 +43,11 @@ public class WhatsAppPlugin extends Plugin {
     @PluginMethod
     public void enviarArchivo(PluginCall call) {
         String ruta = call.getString("uri", "");
-        String pkg = call.getString("app", NORMAL);
+        // Mario PC usa solo WhatsApp Business: se ignora cualquier otra app que llegue
+        String pkg = BUSINESS;
         String numero = call.getString("numero", "");
         String texto = call.getString("texto", "");
         String tipo = call.getString("tipo", "application/pdf");
-        if (!NORMAL.equals(pkg) && !BUSINESS.equals(pkg)) pkg = NORMAL;
 
         try {
             String path = Uri.parse(ruta).getPath();
@@ -64,7 +64,29 @@ public class WhatsAppPlugin extends Plugin {
             getActivity().startActivity(i);
             call.resolve();
         } catch (ActivityNotFoundException e) {
-            call.reject("WhatsApp no está instalado", "NO_WHATSAPP");
+            call.reject("WhatsApp Business no está instalado", "NO_WHATSAPP");
+        } catch (Exception e) {
+            call.reject(String.valueOf(e.getMessage()), "ERROR");
+        }
+    }
+
+    // Abre un chat en WhatsApp Business con el texto ya escrito (sin archivo).
+    // Sin número, abre la lista de chats de Business para elegir a quién mandarlo.
+    @PluginMethod
+    public void abrirChat(PluginCall call) {
+        String numero = call.getString("numero", "");
+        String texto = call.getString("texto", "");
+        try {
+            StringBuilder u = new StringBuilder("whatsapp://send?");
+            if (numero != null && !numero.isEmpty()) u.append("phone=").append(Uri.encode(numero)).append("&");
+            u.append("text=").append(Uri.encode(texto == null ? "" : texto));
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(u.toString()));
+            i.setPackage(BUSINESS);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getActivity().startActivity(i);
+            call.resolve();
+        } catch (ActivityNotFoundException e) {
+            call.reject("WhatsApp Business no está instalado", "NO_WHATSAPP");
         } catch (Exception e) {
             call.reject(String.valueOf(e.getMessage()), "ERROR");
         }
