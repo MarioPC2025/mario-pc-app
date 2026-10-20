@@ -180,11 +180,21 @@ export function mensajeComprobante(t) {
   return (nom ? 'Hola ' + nom + '! ' : 'Hola! ') + 'Te paso el comprobante de recepción de tu ' + equipoCorto(t) +
     ' (orden N° ' + t.orden + '). Guardalo para cuando vengas a retirarlo. Cualquier duda, escribime.\n\nMario PC';
 }
+// Link directo para dejar la reseña en Google (el que usa Mario en el mensaje del informe)
+const LINK_RESENA = 'https://g.page/r/Cae5FNgYFkPuEAE/review';
+// "lista" para notebook / PC / all-in-one (la notebook, la PC), "listo" para celular o equipo sin tipo
+function listoPara(t) { return ['notebook', 'escritorio', 'aio'].includes(t.equipo.tipo) ? 'lista' : 'listo'; }
 export function mensajeInforme(t) {
   const nom = primerNombre(t);
-  return (nom ? 'Hola ' + nom + '! ' : 'Hola! ') + 'Te paso el informe técnico de tu ' + equipoCorto(t) +
-    ' (orden N° ' + t.orden + '), con todo lo que le hice y la garantía. Cualquier duda, escribime.' +
-    ((db.cfg.negocio.resenas || '').trim() ? '\n\nSi te gustó el trabajo, me ayudás muchísimo dejando una reseña en Google: ' + db.cfg.negocio.resenas.trim() : '') +
-    '\n\nMario PC';
+  return [
+    '¡Hola' + (nom ? ' ' + nom : '') + '! Soy Mario, de Mario PC 👋',
+    '',
+    'Te cuento que tu ' + equipoCorto(t) + ' ya está ' + listoPara(t) + ' y funcionando. Si quedaste conforme con el trabajo, ¿me ayudás con una reseña en Google? Te lleva un minuto y para un emprendimiento chico como el mío vale muchísimo 🙏',
+    '',
+    'Acá va el link:',
+    LINK_RESENA,
+    '',
+    '¡Gracias por confiar en Mario PC!',
+  ].join('\n');
 }
 export function avisarListo(t) { abrirWhatsApp(t.cliente.tel, mensajeListo(t)); }
