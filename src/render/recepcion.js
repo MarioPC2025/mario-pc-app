@@ -2,7 +2,7 @@
 // Es el mismo diseño del artefacto "Recepción Mario PC", ahora alimentado con la ficha del trabajo.
 
 import { ACCESORIOS, DANOS, equipoNombre, claveNombre } from '../catalog.js';
-import { fechaFmt, diaCorto } from '../util.js';
+import { fechaFmt, diaCorto, fmt } from '../util.js';
 import { PREFIJO_FICHA, dibujarQR, modulosQR } from '../qr.js';
 import { MARK_ETIQUETA, MARK_A4 } from '../brand.js';
 import { FD, FB, FM, wrapLines, limitLines, toBW, cargarImagen } from './canvas.js';
@@ -134,6 +134,22 @@ export function rotarParaImpresora(src, antihorario) {
 
 /* ---------- Comprobante A4 (200 dpi) ---------- */
 const AVISO = 'Antes de dejar el equipo, hacé una copia de seguridad (backup) de tus archivos. Mario PC no se hace responsable por la pérdida de información guardada en el equipo. Si el trabajo requiere formatear, reinstalar el sistema o cambiar el disco, los datos pueden perderse.';
+const SENA = 'Si cancelás el trabajo después de dejar la seña, la seña no se devuelve: cubre los repuestos encargados y el trabajo ya hecho.';
+// Condiciones que salen en el comprobante: [título, texto]
+const plata = (n) => fmt(n).replace(' ', '\u00a0');
+export function condiciones(cfg) {
+  const out = [['Tus datos', AVISO]];
+  const r = cfg.retiro;
+  if (r && r.dias > 0) {
+    out.push(['Retiro del equipo', 'Cuando te avise que está listo, tenés ' + r.dias + ' días para retirarlo.' +
+      (r.porDia > 0 ? ' Pasado ese plazo se cobra un cargo por guarda de ' + plata(r.porDia) + ' por día (' + plata(r.porDia * 30) + '\u00a0por mes), que se suma al total del trabajo.' : '') +
+      ' El equipo se entrega solo con el pago completo.']);
+  }
+  out.push(['Seña', SENA]);
+  const g = cfg.negocio.garantiaDias;
+  if (g > 0) out.push(['Garantía', g + (g == 1 ? ' día' : ' días') + ' sobre el trabajo realizado.']);
+  return out;
+}
 
 function drawA4(t, cfg, k, firmas = true) {
   const PW = 1654, PH = 2339, u = PW / 210;
@@ -180,6 +196,9 @@ function drawA4(t, cfg, k, firmas = true) {
     c.fillStyle = '#000'; y += hmax + mm(2.5 * k);
   }
   const dash = (s) => (s && String(s).trim() ? String(s).trim() : '-');
+  if (t.garantiaDe) {
+    F('700', 4.2, FD, k); c.fillText('Reclamo de garantía del trabajo N° ' + t.garantiaDe.orden + ' (' + fechaFmt(t.garantiaDe.fecha) + ').', X, y + mm(2 * k)); y += mm(5 * k);
+  }
   sec('Cliente');
   row([{ w: 112, label: 'Nombre y apellido', val: dash(t.cliente.nombre) }, { w: 66, label: 'Teléfono', val: dash(t.cliente.tel) }]);
   sec('Equipo');
@@ -214,16 +233,26 @@ function drawA4(t, cfg, k, firmas = true) {
   F('400', 3, FM, k); c.fillStyle = '#555'; c.fillText('X = observado al recibir el equipo', X, y + mm(2.5 * k)); c.fillStyle = '#000';
   y += mm(6 * k);
   if (t.obs.trim()) { sec('Observaciones'); row([{ w: 182, label: '', val: t.obs.trim(), max: 3 }]); }
-  // aviso de datos
+  const sn = t.pago && typeof t.pago.sena === 'number' && t.pago.sena > 0 ? t.pago.sena : 0;
+  if (sn) {
+    sec('Seña');
+    row([{ w: 60, label: 'Seña recibida', val: fmt(sn) }, { w: 56, label: 'Forma de pago', val: t.pago.senaMedio === 'mp' ? 'Mercado Pago' : 'Efectivo' }, { w: 58, label: 'Fecha', val: fechaFmt(t.pago.senaFecha || t.fecha) }]);
+  }
+  // condiciones: datos, retiro y seña
   y += mm(3 * k);
-  F('400', 3.9, FD, k);
-  const al = wrapLines(c, AVISO, CW - mm(10)), alh = mm(5.2 * k), ah = mm(11 * k) + al.length * alh;
+  const conds = condiciones(cfg), alh = mm(5 * k);
+  F('400', 3.7, FD, k);
+  const bloques = conds.map(([tit, txt]) => wrapLines(c, txt, CW - mm(10)));
+  const ah = mm(13 * k) + bloques.reduce((s2, b) => s2 + mm(5.8 * k) + b.length * alh, 0);
   c.fillStyle = '#eeeeee'; c.fillRect(X, y, CW, ah); c.strokeStyle = '#000'; c.lineWidth = 2; c.strokeRect(X, y, CW, ah); c.fillStyle = '#000';
-  F('700', 3.3, FM, k); c.fillText('AVISO SOBRE TUS DATOS', X + mm(5), y + mm(6.5 * k));
-  F('400', 3.9, FD, k); al.forEach((l, i) => c.fillText(l, X + mm(5), y + mm(12.5 * k) + i * alh));
+  F('700', 3.3, FM, k); c.fillText('CONDICIONES', X + mm(5), y + mm(6.5 * k));
+  let cy = y + mm(12 * k);
+  conds.forEach(([tit], i) => {
+    F('700', 3.7, FD, k); c.fillText(tit + ':', X + mm(5), cy); cy += mm(5.4 * k);
+    F('400', 3.7, FD, k); bloques[i].forEach((l) => { c.fillText(l, X + mm(5), cy); cy += alh; });
+    cy += mm(0.4 * k);
+  });
   y += ah + mm(4 * k);
-  const g = cfg.negocio.garantiaDias;
-  if (g > 0) { F('700', 4.2, FD, k); c.fillText('Garantía: ' + g + (g == 1 ? ' día' : ' días') + ' sobre el trabajo realizado.', X, y + mm(3.5 * k)); y += mm(6 * k); }
   // sin firmas el contenido puede bajar hasta el pie
   const overflow = y > (firmas ? sigTop : PH - mm(24)) - mm(8);
   c.fillStyle = '#000';
@@ -246,6 +275,6 @@ function drawA4(t, cfg, k, firmas = true) {
 // opts.firmas (por defecto true): dibuja o no los campos de firma del cliente y de Mario PC
 export function renderA4(t, cfg, { firmas = true } = {}) {
   let r = null;
-  for (const k of [1, 0.94, 0.88, 0.82, 0.76]) { r = drawA4(t, cfg, k, firmas); if (!r.overflow) break; }
+  for (const k of [1, 0.94, 0.88, 0.82, 0.76, 0.7, 0.64]) { r = drawA4(t, cfg, k, firmas); if (!r.overflow) break; }
   return r.cv;
 }

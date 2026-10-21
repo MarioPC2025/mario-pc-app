@@ -105,6 +105,7 @@ function armar(d, k) {
   y += rh + v(4);
 
   /* ---------- Secciones ---------- */
+  if (d.garantiaDe) { font('bold', 9.5); color(GREEN_D); doc.text('Reclamo de garantía del trabajo N° ' + d.garantiaDe + '', M, y); y += v(6); }
   if (d.falla) { seccion('Lo que me contaste'); parrafo(d.falla, 10.5, MUTED); }
   if (d.diagnostico) { seccion('Diagnóstico'); parrafo(d.diagnostico); }
 
@@ -209,7 +210,13 @@ function armar(d, k) {
     const bx = M + CW - 64;
     fill(DARK); doc.rect(bx, y, 64, 28, 'F');
     font('bold', 7.5); doc.setTextColor(150, 162, 156); doc.text('IMPORTE TOTAL', bx + 6, y + 6.5, { charSpace: 0.5 });
-    font('bold', 20); color(GREEN); doc.text(fmt(d.total), bx + 60, y + 19, { align: 'right' });
+    font('bold', 20); color(GREEN); doc.text(fmt(d.total), bx + 60, y + 17, { align: 'right' });
+    const extra = [];
+    if (d.guarda > 0) extra.push('Incluye guarda: ' + fmt(d.guarda));
+    if (d.sena > 0) extra.push(d.pagado ? 'Pagado' : 'Seña ' + fmt(d.sena) + ' · Saldo ' + fmt(d.total - d.sena));
+    else if (d.pagado) extra.push('Pagado');
+    font('normal', 7.5); doc.setTextColor(170, 180, 175);
+    extra.forEach((x, i) => doc.text(x, bx + 60, y + 22 + i * 3.4, { align: 'right' }));
   }
   y += 30;
 

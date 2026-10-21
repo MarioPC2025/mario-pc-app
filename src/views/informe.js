@@ -6,6 +6,7 @@ import { RESULTADOS, TAREAS, TAREAS_POR_SERVICIO, PRUEBAS, recomendacionesPara, 
 import { verInforme, mensajeInforme, marcarResenaPedida } from '../acciones.js';
 import { abrirWhatsApp } from '../files.js';
 import { setTitulo, hoja } from '../nav.js';
+import { registrarPago } from './cobro.js';
 import { bloque, chips } from './recepcion.js';
 
 const TAREA_BACKUP = 'Copia de seguridad de archivos';
@@ -76,9 +77,15 @@ export const vistaInforme = {
         el('div', { class: 'two' },
           campo('Repuesto', { value: r.nombre, maxlength: '60', placeholder: 'Ej: SSD 480 GB' }, (v) => { r.nombre = v; guardar(); }).wrap,
           campo('Marca / detalle', { value: r.detalle, maxlength: '80', placeholder: 'Ej: Kingston A400' }, (v) => { r.detalle = v; guardar(); }).wrap),
+        costoCampo(r),
         el('div', { class: 'rowcard-foot' },
-          el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: !!r.cliente, onchange: (e) => { r.cliente = e.target.checked; guardar(); } }), el('span', { text: 'Lo trajo el cliente' })),
+          el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: !!r.cliente, onchange: (e) => { r.cliente = e.target.checked; guardar(); pintarReps(); } }), el('span', { text: 'Lo trajo el cliente' })),
           el('button', { type: 'button', class: 'btn small ghost', text: 'Quitar', onclick: () => { inf.repuestos.splice(i, 1); guardar(); pintarReps(); } })))));
+    }
+    // Lo que pagaste el repuesto: no sale en el informe, sirve para la ganancia
+    function costoCampo(r) {
+      if (r.cliente) return null;
+      return el('div', { class: 'field costo' }, el('label', { text: 'Me costó (no sale en el informe)' }), dinero(typeof r.costo === 'number' ? r.costo : null, (v) => { r.costo = v == null ? null : Math.abs(v); guardar(); }));
     }
     pintarReps();
 
@@ -132,7 +139,10 @@ function ofrecerEntregado(t) {
   hoja('¿Ya lo entregaste?', (cerrar) => [
     el('p', { class: 'sheet-p', text: 'Si el equipo ya volvió con su dueño, lo paso a "Entregado".' + (t.claveValor ? ' La clave que anotaste se borra.' : '') }),
     el('div', { class: 'stack' },
-      el('button', { type: 'button', class: 'btn primary', text: 'Sí, marcar entregado', onclick: () => { t.estado = 'entregado'; guardarTrabajo(t); cerrar(); toast('Marcado como entregado'); } }),
+      el('button', { type: 'button', class: 'btn primary', text: 'Sí, marcar entregado', onclick: () => {
+        t.estado = 'entregado'; guardarTrabajo(t); cerrar(); toast('Marcado como entregado');
+        if (!(t.pago && t.pago.pagado)) registrarPago(t);
+      } }),
       el('button', { type: 'button', class: 'btn', text: 'Todavía no', onclick: cerrar })),
   ]);
 }

@@ -48,6 +48,8 @@ export function defaultCfg() {
     },
     tareasPropias: [],
     drive: { url: '' },
+    retiro: { dias: 30, porDia: 2000 },
+    diezmo: { pct: 10, dados: {} }, // dados: { 'AAAA-MM': fecha en que lo diste }
     presupuesto: { validez: 7, pagos: 'Efectivo o Mercado Pago' },
     etiqueta: { largo: 80, giro: 'ccw', tel: true },
     impresora: { deviceId: '', nombre: '', modo: 'normal', intensidad: 'intensa' },
@@ -79,6 +81,12 @@ function normalizeCfg(raw) {
   if (e.giro === 'cw' || e.giro === 'ccw') o.etiqueta.giro = e.giro;
   if (typeof e.tel === 'boolean') o.etiqueta.tel = e.tel;
   if (Array.isArray(raw.tareasPropias)) o.tareasPropias = raw.tareasPropias.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim());
+  const rt = raw.retiro || {};
+  if (isFinite(+rt.dias) && rt.dias !== '' && rt.dias != null) o.retiro.dias = Math.max(0, Math.min(365, +rt.dias));
+  if (isFinite(+rt.porDia) && rt.porDia !== '' && rt.porDia != null) o.retiro.porDia = Math.max(0, +rt.porDia);
+  const dz = raw.diezmo || {};
+  if (isFinite(+dz.pct) && dz.pct !== '' && dz.pct != null) o.diezmo.pct = Math.max(0, Math.min(100, +dz.pct));
+  if (dz.dados && typeof dz.dados === 'object') o.diezmo.dados = Object.assign({}, dz.dados);
   const dr = raw.drive || {};
   if (typeof dr.url === 'string') o.drive.url = dr.url.trim();
   const im = raw.impresora || {};
@@ -117,6 +125,15 @@ function migrar(conCfg) {
   let cambio = false;
   for (const t of db.trabajos) {
     if (t.claveValor == null) { t.claveValor = ''; cambio = true; }
+    if (!Array.isArray(t.fotos)) { t.fotos = []; cambio = true; }
+    // Fichas viejas: lo entregado se toma como cobrado el día de la entrega
+    if (!t.pago || typeof t.pago !== 'object') {
+      t.pago = pagoVacio();
+      if (t.estado === 'entregado' && t.informe && typeof t.informe.total === 'number') {
+        Object.assign(t.pago, { pagado: true, pagoMonto: t.informe.total, pagoFecha: t.informe.fechaEntrega || t.fecha });
+      }
+      cambio = true;
+    }
     // El PIN anotado en Observaciones pasa al campo privado (o se borra si el equipo ya se entregó)
     if (t.clave === 'pin' && /^\s*\d{3,10}\s*$/.test(t.obs || '')) {
       if (t.estado !== 'entregado' && !t.claveValor) t.claveValor = t.obs.trim();
@@ -125,6 +142,9 @@ function migrar(conCfg) {
     if (t.estado === 'entregado' && t.claveValor) { t.claveValor = ''; cambio = true; }
     // Con el informe ya armado, el equipo está listo
     if (t.informe && t.informe.generado && (t.estado === 'recibido' || t.estado === 'en_curso')) { t.estado = 'listo'; cambio = true; }
+    // Desde cuándo está listo (para el plazo de retiro) y cuándo se entregó
+    if (t.estado === 'listo' && !t.listoDesde) { t.listoDesde = String((t.informe && t.informe.generado) || t.actualizado || todayISO()).slice(0, 10); cambio = true; }
+    if (t.estado === 'entregado' && !t.entregadoEl) { t.entregadoEl = (t.informe && t.informe.fechaEntrega) || String(t.actualizado || '').slice(0, 10) || todayISO(); cambio = true; }
   }
   if (conCfg) {
     const reps = db.cfg.precios.repuestos;
@@ -187,9 +207,15 @@ export function trabajoVacio() {
     cliente: { nombre: '', tel: '' },
     equipo: { tipo: 'notebook', marca: '', modelo: '', serie: '' },
     entrega: '', falla: '', acc: [], accOtro: '', danos: [], danoOtro: '', clave: 'no', claveValor: '', obs: '',
-    presupuestoId: null,
+    presupuestoId: null, garantiaDe: null, fotos: [],
+    pago: pagoVacio(), listoDesde: null, entregadoEl: null,
     informe: null,
   };
+}
+
+// Cobro del trabajo. pagoMonto queda fijo al registrar el pago (incluye la guarda de ese momento).
+export function pagoVacio() {
+  return { sena: null, senaMedio: 'efectivo', senaFecha: null, pagado: false, pagoMonto: null, pagoMedio: '', pagoFecha: null, sinGuarda: false, gastos: null };
 }
 
 export function informeVacio(t) {
@@ -197,7 +223,7 @@ export function informeVacio(t) {
   return {
     resultado: 'reparado', diagnostico: '', tareas: [], tareasOtras: [], repuestos: [], datosEscritorio: false,
     pruebas: [], recomendaciones: [], recomendacionOtra: '',
-    total: pres && !pres.missing ? pres.total : null, mostrarTotal: true,
+    total: t.garantiaDe ? 0 : pres && !pres.missing ? pres.total : null, mostrarTotal: true,
     fechaEntrega: todayISO(), generado: null,
   };
 }
@@ -206,6 +232,11 @@ export function guardarTrabajo(t) {
   t.actualizado = stampISO();
   // La clave del cliente no se guarda una vez que el equipo se entregó
   if (t.estado === 'entregado' || t.clave === 'no') t.claveValor = '';
+  // Fechas de "listo" (para el plazo de retiro) y de entrega
+  if (t.estado === 'listo' && !t.listoDesde) t.listoDesde = todayISO();
+  if (t.estado === 'recibido' || t.estado === 'en_curso') t.listoDesde = null;
+  if (t.estado === 'entregado' && !t.entregadoEl) t.entregadoEl = todayISO();
+  if (t.estado !== 'entregado') t.entregadoEl = null;
   // Si el presupuesto quedó sin teléfono, se completa con el de la ficha
   const pres = t.presupuestoId ? db.presupuestos.find((p) => p.id === t.presupuestoId) : null;
   if (pres && !(pres.tel || '').trim() && t.cliente.tel.trim()) { pres.tel = t.cliente.tel.trim(); guardarPresupuestos(); }

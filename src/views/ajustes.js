@@ -1,8 +1,8 @@
 // Ajustes: datos del negocio, precios, etiqueta, impresora y respaldo.
 
 import { Capacitor } from '@capacitor/core';
-import { el, campo, dinero, toast, uid, haceCuanto, todayISO, botonConfirmar } from '../util.js';
-import { db, guardarCfg, guardarUltimo, exportarRespaldo, marcarRespaldo, importarRespaldo, trabajoVacio } from '../store.js';
+import { el, campo, dinero, toast, uid, haceCuanto, todayISO, botonConfirmar, fmt } from '../util.js';
+import { db, guardarCfg, guardarMeta, guardarUltimo, exportarRespaldo, marcarRespaldo, importarRespaldo, trabajoVacio } from '../store.js';
 import { EQUIPOS, SERVICIOS } from '../catalog.js';
 import { conectarImpresora, imprimirEtiqueta } from '../acciones.js';
 import { compartirArchivo, copiar, abrirUrl } from '../files.js';
@@ -29,6 +29,20 @@ export const vistaAjustes = {
       el('div', { class: 'two' }, g('wsp', 'Tu WhatsApp', { type: 'tel', inputmode: 'tel', maxlength: '24' }), g('ig', 'Instagram', { maxlength: '40' }), g('web', 'Web', { maxlength: '40' }), garantia),
       g('resenas', 'Link para reseñas de Google', { type: 'url', inputmode: 'url', maxlength: '200' }),
       el('p', { class: 'hint', text: 'Salen en el pie del presupuesto, del comprobante y del informe. La garantía se usa en los tres. El link de reseñas va como QR en el informe y en el mensaje al cliente; si lo dejás vacío, no aparece.' })));
+
+    // Retiro del equipo y guarda
+    const mensual = el('p', { class: 'hint' });
+    const pintarMensual = () => { mensual.textContent = 'Equivale a ' + fmt(c.retiro.porDia * 30) + ' por mes. Sale en el comprobante y se suma solo al total si el equipo no se retira a tiempo.'; };
+    pintarMensual();
+    wrap.append(s({ id: 'retiro', nombre: 'Retiro y guarda' }, el('div', { class: 'two' },
+      campo('Días para retirar', { type: 'number', inputmode: 'numeric', min: '0', max: '365', value: c.retiro.dias }, (v) => { const n = parseInt(v, 10); c.retiro.dias = isFinite(n) && n > 0 ? Math.min(n, 365) : 0; guardarCfg(); }).wrap,
+      el('div', { class: 'field' }, el('label', { text: 'Guarda por día' }), dinero(c.retiro.porDia, (v) => { c.retiro.porDia = v == null ? 0 : Math.abs(v); guardarCfg(); pintarMensual(); }))),
+      mensual));
+
+    // Diezmo
+    wrap.append(s({ id: 'diezmo', nombre: 'Diezmo' },
+      campo('Porcentaje sobre la ganancia', { type: 'number', inputmode: 'numeric', min: '0', max: '100', value: c.diezmo.pct }, (v) => { const n = parseFloat(String(v).replace(',', '.')); c.diezmo.pct = isFinite(n) && n >= 0 ? Math.min(n, 100) : 0; guardarCfg(); }).wrap,
+      el('p', { class: 'hint', text: 'Se calcula sobre la ganancia de cada mes (lo cobrado menos lo que gastaste en repuestos y otros gastos). Lo ves y lo marcás como dado en Resumen.' })));
 
     // Presupuesto
     wrap.append(s({ id: 'pres', nombre: 'Presupuesto' }, el('div', { class: 'two' },
@@ -149,7 +163,7 @@ export const vistaAjustes = {
           if (ok) { marcarRespaldo(); recargar(); }
         } }),
         el('button', { type: 'button', class: 'btn', text: 'Cargar un respaldo', onclick: () => archivo.click() }), archivo),
-      el('p', { class: 'hint', text: 'El respaldo es un archivo que guardás donde quieras. Tiene datos de tus clientes (nunca las claves): no lo compartas.' })));
+      el('p', { class: 'hint', text: 'El respaldo es un archivo que guardás donde quieras. Tiene datos de tus clientes (nunca las claves): no lo compartas. Las fotos no van en este archivo: se respaldan en tu Drive.' })));
 
     wrap.append(el('p', { class: 'foot', text: 'Mario PC · versión ' + VERSION + (Capacitor.isNativePlatform() ? '' : ' (navegador)') }));
 
@@ -171,8 +185,18 @@ function seccionDrive() {
       toast(ok ? 'Respaldo guardado en tu Drive' : 'No se pudo subir: ' + (db.meta.errorDrive || 'error'), 4000);
       recargar();
     });
-    return [estado,
-      el('p', { class: 'hint', text: 'Se sube solo cuando hay cambios (como mucho cada media hora), al salir de la app o al volver a abrirla. Queda en la carpeta "Mario PC - Respaldos" de tu Drive, un archivo por día.' }),
+    const viejo = md.scriptViejo ? el('div', { class: 'notice' },
+      el('p', { text: 'Para que se suban también las fotos, actualizá el código del script: 1) Copiá el código nuevo. 2) En Apps Script reemplazá todo y guardá. 3) Implementar → Administrar implementaciones → lápiz → Versión: Nueva versión → Implementar. El link no cambia.' }),
+      el('div', { class: 'row-btns' },
+        el('button', { type: 'button', class: 'btn small', text: 'Copiar código nuevo', onclick: () => copiar(CODIGO_SCRIPT) }),
+        el('button', { type: 'button', class: 'btn small', text: 'Ya lo actualicé', onclick: async () => {
+          const err = await probarLink(c.drive.url); guardarMeta();
+          toast(err || (md.scriptViejo ? 'Todavía responde el código viejo. ¿Hiciste "Nueva versión"?' : 'Listo, ahora se suben las fotos'), 4000);
+          if (!md.scriptViejo) subirADrive({ manual: true });
+          recargar();
+        } }))) : null;
+    return [estado, viejo,
+      el('p', { class: 'hint', text: 'Se sube solo cuando hay cambios (como mucho cada media hora), al salir de la app o al volver a abrirla. Queda en la carpeta "Mario PC - Respaldos" de tu Drive, un archivo por día, y las fotos de los equipos en la subcarpeta "Fotos".' }),
       el('div', { class: 'stack' }, subir,
         botonConfirmar('Desconectar Drive', '¿Seguro? Tocá de nuevo', () => { c.drive.url = ''; md.ultimoDrive = null; md.errorDrive = null; guardarCfg(); recargar(); }, 'btn ghost small'))];
   }

@@ -14,7 +14,7 @@ export function cargarImagen(src) {
 }
 
 export function wrapLines(c, text, maxW) {
-  text = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+  text = String(text == null ? '' : text).replace(/[ \t\r\n]+/g, ' ').trim(); // el espacio duro (\u00a0) no corta
   if (!text) return ['-'];
   const words = text.split(' '), lines = [];
   let cur = '';

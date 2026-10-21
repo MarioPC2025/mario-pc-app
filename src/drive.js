@@ -5,22 +5,26 @@
 // No hace falta ninguna clave de Google en la app: el link del script es la llave.
 
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
-import { db, exportarRespaldo, guardarMeta, guardarTodoYa } from './store.js';
+import { db, exportarRespaldo, guardarMeta, guardarTodoYa, guardarTrabajos } from './store.js';
 import { stampISO } from './util.js';
+import { base64Foto } from './fotos.js';
 
 const NATIVE = Capacitor.isNativePlatform();
 const CADA_MIN = 30; // sube como mucho una vez cada media hora, y solo si hubo cambios
 
 export const CODIGO_SCRIPT = `// Respaldo de la app Mario PC en Google Drive
-// Guarda cada respaldo en la carpeta "Mario PC - Respaldos" (uno por día, quedan los últimos 60).
+// Guarda cada respaldo en la carpeta "Mario PC - Respaldos" (uno por día, quedan los últimos 60)
+// y las fotos de los equipos en "Mario PC - Respaldos/Fotos/N° <orden> - <cliente>".
 const CARPETA = 'Mario PC - Respaldos';
 const GUARDAR = 60;
+const VERSION = 2;
 
 function doPost(e) {
   const lock = LockService.getScriptLock();
   try {
     const txt = (e && e.postData && e.postData.contents) || '';
     const data = JSON.parse(txt);
+    if (data.app === 'mariopc-foto') return guardarFoto(data);
     if (data.app !== 'mariopc-taller') return salida({ ok: false, error: 'No es un respaldo de la app' });
     lock.waitLock(20000);
     const carpeta = carpetaRespaldos();
@@ -39,7 +43,23 @@ function doPost(e) {
 
 function doGet() {
   carpetaRespaldos();
-  return salida({ ok: true, app: 'mariopc-respaldo' });
+  return salida({ ok: true, app: 'mariopc-respaldo', version: VERSION });
+}
+
+function guardarFoto(data) {
+  const fotos = subcarpeta(carpetaRespaldos(), 'Fotos');
+  const nombreCarpeta = String(data.carpeta || 'Sin orden').replace(/[\\/]/g, '-').slice(0, 80);
+  const carpeta = subcarpeta(fotos, nombreCarpeta);
+  const nombre = String(data.nombre || 'foto.jpg').replace(/[\\/]/g, '-');
+  if (!carpeta.getFilesByName(nombre).hasNext()) {
+    carpeta.createFile(Utilities.newBlob(Utilities.base64Decode(data.base64), 'image/jpeg', nombre));
+  }
+  return salida({ ok: true, foto: true });
+}
+
+function subcarpeta(padre, nombre) {
+  const it = padre.getFoldersByName(nombre);
+  return it.hasNext() ? it.next() : padre.createFolder(nombre);
 }
 
 function carpetaRespaldos() {
@@ -90,7 +110,7 @@ export async function probarLink(url) {
   if (!urlValida(url)) return 'Ese no parece el link de la aplicación web. Tiene que empezar con https://script.google.com/macros/s/ y terminar en /exec.';
   try {
     const r = await enviar(url.trim(), null, 'GET');
-    if (r.data && r.data.ok && r.data.app === 'mariopc-respaldo') return '';
+    if (r.data && r.data.ok && r.data.app === 'mariopc-respaldo') { db.meta.scriptViejo = !(r.data.version >= 2); return ''; }
     if (r.status === 401 || r.status === 403) return 'Google no deja entrar: revisá que en "Quién tiene acceso" esté "Cualquier usuario".';
     return 'El link respondió algo raro (' + r.status + '). Revisá que hayas pegado el código completo y vuelto a implementar.';
   } catch (e) {
@@ -105,7 +125,7 @@ export function subirADrive({ manual = false } = {}) {
   if (!url || !urlValida(url)) return Promise.resolve(false);
   if (subiendo) return subiendo;
   if (!manual) {
-    if (!db.meta.pendienteDrive) return Promise.resolve(false);
+    if (!db.meta.pendienteDrive && !fotosPendientes().length) return Promise.resolve(false);
     const ult = db.meta.ultimoDrive ? Date.parse(db.meta.ultimoDrive) : 0;
     if (Date.now() - ult < CADA_MIN * 60000) return Promise.resolve(false);
   }
@@ -118,6 +138,7 @@ export function subirADrive({ manual = false } = {}) {
       db.meta.ultimoDrive = stampISO();
       db.meta.errorDrive = null;
       guardarMeta();
+      await subirFotos(url);
       return true;
     } catch (e) {
       db.meta.pendienteDrive = true;
@@ -129,4 +150,30 @@ export function subirADrive({ manual = false } = {}) {
     }
   })();
   return subiendo;
+}
+
+/* ---------- Fotos ---------- */
+export function fotosPendientes() {
+  if (db.meta.scriptViejo) return [];
+  const out = [];
+  for (const t of db.trabajos) for (const f of t.fotos || []) if (!f.subida) out.push({ t, f });
+  return out;
+}
+
+// Sube hasta 15 fotos por vez. Si el script es el viejo (sin fotos), avisa en Ajustes para actualizarlo.
+async function subirFotos(url) {
+  let subidas = 0;
+  for (const { t, f } of fotosPendientes().slice(0, 15)) {
+    try {
+      const base64 = await base64Foto(t, f);
+      if (!base64) { f.subida = true; continue; } // el archivo ya no está en el teléfono
+      const carpeta = 'N° ' + t.orden + (t.cliente.nombre.trim() ? ' - ' + t.cliente.nombre.trim() : '');
+      const r = await enviar(url, JSON.stringify({ app: 'mariopc-foto', carpeta, nombre: f.archivo, base64 }));
+      if (r.data && r.data.ok && r.data.foto) { f.subida = true; subidas++; continue; }
+      if (r.data && /No es un respaldo/.test(r.data.error || '')) { db.meta.scriptViejo = true; guardarMeta(); }
+      break;
+    } catch (e) { break; }
+  }
+  if (subidas) guardarTrabajos();
+  return subidas;
 }

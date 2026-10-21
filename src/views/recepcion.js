@@ -1,7 +1,7 @@
 // Recepción de equipos: la ficha que antes era el artefacto "Recepción Mario PC".
 
-import { el, campo, debounce, toast, addDays, sumarHabiles, diaCorto, fechaCorta } from '../util.js';
-import { db, trabajoVacio, guardarTrabajo, trabajoPorId, siguienteOrden, trabajosDelCliente } from '../store.js';
+import { el, campo, debounce, toast, addDays, sumarHabiles, diaCorto, fechaCorta, fechaFmt, dinero, todayISO } from '../util.js';
+import { db, trabajoVacio, guardarTrabajo, trabajoPorId, siguienteOrden, trabajosDelCliente, pagoVacio } from '../store.js';
 import { EQUIPOS, ACCESORIOS, DANOS, CLAVES, equipoNombre } from '../catalog.js';
 import { lienzoEtiqueta, lienzoComprobante } from '../acciones.js';
 import { ir, atras, setTitulo } from '../nav.js';
@@ -81,6 +81,14 @@ export const vistaRecepcion = {
     }
     const claves = radios('clave', CLAVES, () => t.clave, (v) => { t.clave = v; if (v === 'no') { t.claveValor = ''; claveCampo.input.value = ''; } pintarClave(); cambio(); });
     pintarClave();
+    // Seña
+    if (!t.pago) t.pago = pagoVacio();
+    const senaMonto = el('div', { class: 'field' }, el('label', { text: 'Monto' }), dinero(t.pago.sena, (v) => {
+      t.pago.sena = v == null || v === 0 ? null : Math.abs(v);
+      t.pago.senaFecha = t.pago.sena ? (t.pago.senaFecha || todayISO()) : null;
+      cambio();
+    }));
+    const senaMedio = radios('sena-medio', [{ id: 'efectivo', nombre: 'Efectivo' }, { id: 'mp', nombre: 'Mercado Pago' }], () => t.pago.senaMedio || 'efectivo', (v) => { t.pago.senaMedio = v; cambio(); });
     const obs = campo('Observaciones', { multiline: true, rows: '2', maxlength: '200', value: t.obs, placeholder: 'Opcional. Sale en el comprobante A4: no anotes la clave acá' }, (v) => { t.obs = v; cambio(); });
 
     // Vista previa
@@ -115,6 +123,7 @@ export const vistaRecepcion = {
     }
 
     main.append(el('div', { class: 'wrap form' },
+      t.garantiaDe ? el('div', { class: 'notice ok' }, el('p', { text: 'Reclamo de garantía del trabajo N° ' + t.garantiaDe.orden + ' (' + fechaFmt(t.garantiaDe.fecha) + '). Sale así en el comprobante y el informe arranca sin cargo.' })) : null,
       el('div', { class: 'two head2' }, orden.wrap, fecha.wrap),
       bloque('Cliente', el('div', { class: 'two' }, nombre.wrap, tel.wrap), historial),
       bloque('Equipo', tipos, el('div', { class: 'two' }, marca.wrap, modelo.wrap), serie.wrap),
@@ -123,6 +132,8 @@ export const vistaRecepcion = {
       bloque('Accesorios que deja', acc, accOtro.wrap, el('p', { class: 'hint', text: 'Si no tildás nada, figura "Ninguno".' })),
       bloque('Estado físico al recibir', danos, danoOtro.wrap, el('p', { class: 'hint', text: 'Si no tildás nada, figura "Sin daños visibles".' })),
       bloque('Clave de acceso', claves, claveCampo.wrap, el('p', { class: 'hint', text: 'La clave no sale en la etiqueta, el comprobante ni el respaldo, y se borra sola cuando marcás el equipo como entregado.' })),
+      bloque('Seña', el('div', { class: 'two' }, senaMonto, el('div', { class: 'field' }, el('label', { text: 'Forma de pago' }), senaMedio)),
+        el('p', { class: 'hint', text: 'Opcional. Sale en el comprobante, con el aviso de que no se devuelve si cancela el trabajo.' })),
       bloque('Observaciones', obs.wrap),
       bloque('Vista previa', pvTabs, pvSlot)),
       el('div', { class: 'bar' }, el('div', { class: 't' }, el('span', { class: 'lbl', text: editando ? 'Editando' : 'Nueva ficha' }), barN), guardarBtn));

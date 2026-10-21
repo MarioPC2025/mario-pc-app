@@ -6,7 +6,9 @@ import { ESTADOS, equipoNombre, claveNombre, estadoCorto, RESULTADOS } from '../
 import { accList, danoList } from '../render/recepcion.js';
 import { imprimirEtiqueta, verComprobante, enviarComprobante, compartirEtiqueta, verInforme, avisarListo, mensajeInforme, marcarResenaPedida } from '../acciones.js';
 import { abrirWhatsApp, llamar } from '../files.js';
-import { ir, atras, setTitulo, setAcciones, hoja } from '../nav.js';
+import { ir, atras, setTitulo, setAcciones, hoja, recargar } from '../nav.js';
+import { seccionRetiro, seccionCobro, seccionGanancia, seccionFotos, botonGarantia, registrarPago } from './cobro.js';
+import { borrarFotosDe } from '../fotos.js';
 
 export const vistaTrabajo = {
   tab: 'trabajos',
@@ -21,7 +23,7 @@ export const vistaTrabajo = {
 
     if (params.recien) {
       params.recien = false;
-      wrap.append(el('div', { class: 'notice ok' }, el('p', { text: 'Ficha guardada. Imprimí la etiqueta y pasale el comprobante al cliente.' })));
+      wrap.append(el('div', { class: 'notice ok' }, el('p', { text: 'Ficha guardada. Imprimí la etiqueta, sacale fotos al equipo y pasale el comprobante al cliente.' })));
     }
 
     // Cabecera
@@ -44,6 +46,7 @@ export const vistaTrabajo = {
           el('button', { type: 'button', class: 'btn primary', text: 'Avisar por WhatsApp', onclick: () => { cerrar(); avisarListo(t); } }),
           el('button', { type: 'button', class: 'btn', text: 'Ahora no', onclick: cerrar })),
       ]);
+      if (id === 'entregado' && t.informe && t.informe.generado && !(t.pago && t.pago.pagado)) registrarPago(t, recargar);
       if (id === 'entregado' && !(t.informe && t.informe.generado)) hoja('Equipo entregado', (cerrar) => [
         el('p', { class: 'sheet-p', text: 'Todavía no armaste el informe técnico de este trabajo.' }),
         el('div', { class: 'stack' },
@@ -59,8 +62,11 @@ export const vistaTrabajo = {
         el('p', { class: 'hero-cli', text: t.cliente.nombre.trim() || 'Sin nombre' }),
         el('p', { class: 'hero-eq', text: [equipoNombre(t.equipo.tipo), t.equipo.marca, t.equipo.modelo].filter((x) => String(x).trim()).join(' ') }),
         el('p', { class: 'hint', text: 'Entró el ' + fechaFmt(t.fecha) + ' (' + haceCuanto(t.fecha) + ')' }),
-        t.entrega ? el('p', { class: 'hero-due', text: 'Entrega prometida: ' + diaCorto(t.entrega) }) : null)),
+        t.entrega ? el('p', { class: 'hero-due', text: 'Entrega prometida: ' + diaCorto(t.entrega) }) : null,
+        t.garantiaDe ? el('button', { type: 'button', class: 'garantia-tag', text: 'Garantía del N° ' + t.garantiaDe.orden, onclick: () => ir('trabajo', { id: t.garantiaDe.id }) }) : null)),
       estados);
+    const retiro = seccionRetiro(t);
+    if (retiro) wrap.append(retiro);
 
     // Acciones
     const lblEtiqueta = el('span', { text: 'Imprimir etiqueta' });
@@ -74,6 +80,8 @@ export const vistaTrabajo = {
       el('button', { type: 'button', class: 'act', onclick: () => avisarListo(t) }, el('span', { class: 'act-i', text: '✆' }), 'Avisar que está listo')));
     wrap.append(el('button', { type: 'button', class: 'linkbtn', text: 'Mandar el comprobante por WhatsApp (sin firmas), sin vista previa', onclick: () => enviarComprobante(t) }));
     wrap.append(el('button', { type: 'button', class: 'linkbtn', text: '¿No imprime? Mandar la etiqueta a la app de Phomemo', onclick: () => compartirEtiqueta(t) }));
+    const gar = botonGarantia(t);
+    if (gar) wrap.append(gar);
 
     // Informe
     if (tieneInforme) {
@@ -109,6 +117,10 @@ export const vistaTrabajo = {
     }
     pintarClave(false);
 
+    // Cobro y ganancia
+    wrap.append(seccionCobro(t));
+    if (tieneInforme || (t.pago && t.pago.pagado)) wrap.append(seccionGanancia(t));
+
     // Datos
     const tel = t.cliente.tel.trim();
     wrap.append(seccion('Cliente',
@@ -128,6 +140,7 @@ export const vistaTrabajo = {
       fila('Accesorios', accList(t).join(', ') || 'Ninguno'),
       fila('Estado físico', danoList(t, false).join(', ') || 'Sin daños visibles'),
       t.obs.trim() ? fila('Observaciones', t.obs.trim()) : null));
+    wrap.append(seccionFotos(t));
 
     const otros = trabajosDelCliente(t.cliente.tel, t.id);
     if (otros.length) {
@@ -146,7 +159,7 @@ export const vistaTrabajo = {
 
     wrap.append(el('div', { class: 'danger-zone' },
       botonConfirmar('Borrar esta ficha', '¿Seguro? Tocá de nuevo para borrar', () => {
-        borrarTrabajo(t.id); toast('Ficha borrada'); atras();
+        borrarFotosDe(t); borrarTrabajo(t.id); toast('Ficha borrada'); atras();
       })));
   },
 };

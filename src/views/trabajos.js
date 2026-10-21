@@ -9,6 +9,7 @@ import { abrirEscaner } from '../scanner.js';
 import { PREFIJO_FICHA } from '../qr.js';
 import { toast } from '../util.js';
 import { paraRecordar } from '../seguimiento.js';
+import { diasListo, diasGuarda, faltaCobrar, plazoRetiro } from '../cuentas.js';
 
 let filtro = 'activos';
 let busqueda = '';
@@ -69,7 +70,11 @@ export const vistaTrabajos = {
     const avisoRec = rec.length ? el('div', { class: 'notice ok' },
       el('p', { text: rec.length === 1 ? (rec[0].cliente.nombre.trim() || 'Un cliente') + ' cumple un año de su última limpieza.' : rec.length + ' clientes cumplen un año de su última limpieza.' }),
       el('button', { type: 'button', class: 'btn small', text: 'Ver', onclick: () => ir('resumen', { ir: 'recordar' }, { raiz: true }) })) : null;
-    main.append(el('div', { class: 'wrap' }, aviso, avisoRec, buscar, chips, lista));
+    const vencidos = db.trabajos.filter((t) => t.estado === 'listo' && diasGuarda(t) > 0);
+    const avisoGuarda = vencidos.length ? el('div', { class: 'notice' },
+      el('p', { text: vencidos.length === 1 ? 'Un equipo pasó los ' + plazoRetiro() + ' días sin retirar: ya corre la guarda.' : vencidos.length + ' equipos pasaron los ' + plazoRetiro() + ' días sin retirar: ya corre la guarda.' }),
+      el('button', { type: 'button', class: 'btn small', text: 'Ver', onclick: () => { filtro = 'listo'; busqueda = ''; buscar.value = ''; pintarChips(); pintarLista(); } })) : null;
+    main.append(el('div', { class: 'wrap' }, aviso, avisoGuarda, avisoRec, buscar, chips, lista));
     main.append(el('button', { type: 'button', class: 'fab', onclick: () => ir('recepcion', {}) }, el('span', { 'aria-hidden': 'true', text: '+' }), 'Recibir equipo'));
     setAcciones([el('button', { type: 'button', class: 'icon-btn scan-btn', 'aria-label': 'Escanear etiqueta', onclick: escanear, html: '<svg viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 12h8"/></svg>' })]);
   },
@@ -94,6 +99,8 @@ function tarjeta(t) {
   const cuando = activo && t.entrega
     ? (faltan < 0 ? 'Se pasó la entrega (' + diaCorto(t.entrega) + ')' : faltan === 0 ? 'Se entrega hoy' : faltan === 1 ? 'Se entrega mañana' : 'Para el ' + diaCorto(t.entrega))
     : null;
+  const dl = t.estado === 'listo' ? diasListo(t) : null, enGuarda = t.estado === 'listo' && diasGuarda(t) > 0;
+  const txtListo = dl == null ? null : enGuarda ? 'Listo hace ' + dl + ' días · corre la guarda' : dl === 0 ? 'Listo desde hoy' : 'Listo hace ' + dl + (dl === 1 ? ' día' : ' días');
   return el('button', { type: 'button', class: 'card job', onclick: () => ir('trabajo', { id: t.id }) },
     el('span', { class: 'job-n' }, el('small', { text: 'N°' }), String(t.orden)),
     el('span', { class: 'job-main' },
@@ -101,10 +108,12 @@ function tarjeta(t) {
       el('span', { class: 'job-eq', text: equipoTexto(t) }),
       el('span', { class: 'job-meta' },
         el('span', { class: 'badge b-' + t.estado, text: estadoCorto(t.estado) }),
-        el('span', { class: demora ? 'warn' : '', text: cuando || (t.estado === 'entregado' && t.informe ? 'Entregado ' + fechaCorta(t.informe.fechaEntrega) : 'Entró ' + haceCuanto(t.fecha)) }),
+        el('span', { class: demora || enGuarda ? 'warn' : '', text: cuando || txtListo || (t.estado === 'entregado' && t.informe ? 'Entregado ' + fechaCorta(t.informe.fechaEntrega) : 'Entró ' + haceCuanto(t.fecha)) }),
+        t.garantiaDe ? el('span', { class: 'mini', text: 'Garantía' }) : null,
         t.informe && t.informe.generado
           ? (t.estado === 'entregado' ? el('span', { class: 'mini', text: 'Informe' }) : el('span', { class: 'mini warn', text: 'Informe hecho · falta entregar' }))
-          : null)));
+          : null,
+        faltaCobrar(t) ? el('span', { class: 'mini warn', text: 'Falta cobrar' }) : null)));
 }
 
 function avisoRespaldo() {

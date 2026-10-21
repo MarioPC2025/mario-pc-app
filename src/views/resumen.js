@@ -1,7 +1,8 @@
 // Resumen del mes: cuánto entró, cuántos equipos, reseñas, presupuestos y clientes para volver a contactar.
 
 import { el, fmt, fechaFmt, diasEntre, todayISO, stampISO, toast } from '../util.js';
-import { db, guardarTrabajo } from '../store.js';
+import { db, guardarTrabajo, guardarCfg } from '../store.js';
+import { cobradoEnMes, gananciaDelMes, diezmoDe, pctDiezmo, diezmosPendientes, faltaCobrar, saldo } from '../cuentas.js';
 import { EQUIPOS, equipoNombre } from '../catalog.js';
 import { mensajeRecordatorio } from '../acciones.js';
 import { abrirWhatsApp } from '../files.js';
@@ -21,14 +22,14 @@ const nombreMes = (m) => MESES[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4);
 const entregaDe = (t) => (t.informe && t.informe.fechaEntrega) || '';
 
 function datosMes(m) {
-  const entregados = db.trabajos.filter((t) => t.estado === 'entregado' && mesDe(entregaDe(t)) === m);
-  const conTotal = entregados.filter((t) => t.informe && typeof t.informe.total === 'number');
-  const facturado = conTotal.reduce((s, t) => s + t.informe.total, 0);
+  const entregados = db.trabajos.filter((t) => t.estado === 'entregado' && mesDe(t.entregadoEl || entregaDe(t)) === m);
+  const g = gananciaDelMes(m);
+  const facturado = cobradoEnMes(m);
   const dias = entregados.map((t) => diasEntre(t.fecha, entregaDe(t))).filter((d) => d != null && d >= 0);
   const pedidas = db.trabajos.filter((t) => mesDe(t.resenaPedida) === m);
   const pres = db.presupuestos.filter((p) => mesDe(p.fecha) === m);
   return {
-    entregados, facturado, ticket: conTotal.length ? Math.round(facturado / conTotal.length) : null,
+    entregados, facturado, g, ticket: g.trabajos ? Math.round(g.cobrado / g.trabajos) : null,
     recibidos: db.trabajos.filter((t) => mesDe(t.fecha) === m).length,
     dias: dias.length ? dias.reduce((a, b) => a + b, 0) / dias.length : null,
     pedidas: pedidas.length, dejadas: pedidas.filter((t) => t.resenaDejo).length,
@@ -54,14 +55,31 @@ export const vistaResumen = {
 
     const tile = (lbl, val, sub, grande) => el('div', { class: 'stat' + (grande ? ' big' : '') }, el('span', { class: 'lbl', text: lbl }), el('b', { text: val }), sub ? el('small', { text: sub }) : null);
     const porCobrar = db.trabajos.filter((t) => t.estado === 'listo' && t.informe && typeof t.informe.total === 'number');
+    const sinCobrar = db.trabajos.filter(faltaCobrar);
+    // Diezmo del mes
+    const diezmo = diezmoDe(d.g.ganancia), dado = db.cfg.diezmo.dados[mes];
+    const diezmoTile = el('div', { class: 'stat big diezmo' },
+      el('span', { class: 'lbl', text: 'Diezmo (' + pctDiezmo() + '% de la ganancia)' }), el('b', { text: fmt(diezmo) }),
+      el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: !!dado, onchange: (e) => {
+        if (e.target.checked) db.cfg.diezmo.dados[mes] = todayISO(); else delete db.cfg.diezmo.dados[mes];
+        guardarCfg(); recargar();
+      } }), el('span', { text: dado ? 'Ya lo di (' + fechaFmt(dado) + ')' : 'Ya di el diezmo de ' + nombreMes(mes).toLowerCase() })));
+    const pend = diezmosPendientes().filter((m) => m !== mes);
+    if (pend.length) wrap.append(el('div', { class: 'notice' },
+      el('p', { text: 'Diezmo sin marcar: ' + pend.map((m) => nombreMes(m) + ' (' + fmt(diezmoDe(gananciaDelMes(m).ganancia)) + ')').join(', ') + '.' }),
+      el('button', { type: 'button', class: 'btn small', text: 'Ir', onclick: () => { mes = pend[0]; recargar(); } })));
     wrap.append(el('div', { class: 'stats' },
-      tile('Facturado', fmt(d.facturado), d.entregados.length ? 'con ' + d.entregados.length + (d.entregados.length === 1 ? ' equipo entregado' : ' equipos entregados') : 'sin entregas este mes', true),
+      tile('Cobrado', fmt(d.facturado), 'señas y pagos que entraron este mes', true),
+      tile('Ganancia', fmt(d.g.ganancia), d.g.trabajos ? 'de ' + d.g.trabajos + (d.g.trabajos === 1 ? ' trabajo cobrado' : ' trabajos cobrados') + ', menos ' + fmt(d.g.costos) + ' de costos' : 'ningún trabajo cobrado'),
+      tile('Equipos entregados', String(d.entregados.length)),
+      diezmoTile,
       tile('Ticket promedio', d.ticket != null ? fmt(d.ticket) : '-'),
       tile('Equipos recibidos', String(d.recibidos)),
       tile('Días en el taller', d.dias != null ? d.dias.toFixed(1).replace('.', ',') : '-', 'promedio, de que entra a que sale'),
       tile('Reseñas', d.pedidas ? d.dejadas + ' de ' + d.pedidas : '-', d.pedidas ? 'dejadas de las que pediste' : 'no pediste este mes'),
       tile('Presupuestos', d.presEnviados ? d.presAprobados + ' de ' + d.presEnviados : '-', d.presEnviados ? 'aprobados (' + Math.round(d.presAprobados * 100 / d.presEnviados) + '%)' : 'ninguno este mes'),
-      mes === hoyMes && porCobrar.length ? tile('Listos sin entregar', fmt(porCobrar.reduce((s, t) => s + t.informe.total, 0)), porCobrar.length + (porCobrar.length === 1 ? ' equipo' : ' equipos') + ' para retirar', true) : null));
+      mes === hoyMes && porCobrar.length ? tile('Listos sin entregar', fmt(porCobrar.reduce((s, t) => s + t.informe.total, 0)), porCobrar.length + (porCobrar.length === 1 ? ' equipo' : ' equipos') + ' para retirar', true) : null,
+      mes === hoyMes && sinCobrar.length ? tile('Entregados sin cobrar', fmt(sinCobrar.reduce((s, t) => s + (saldo(t) || 0), 0)), sinCobrar.map((t) => 'N° ' + t.orden).join(', '), true) : null));
 
     // Por tipo de equipo
     if (d.entregados.length) {
@@ -75,10 +93,10 @@ export const vistaResumen = {
 
     // Últimos 6 meses
     const ult = [];
-    for (let i = 5; i >= 0; i--) { const m = moverMes(hoyMes, -i); ult.push({ m, v: datosMes(m).facturado }); }
+    for (let i = 5; i >= 0; i--) { const m = moverMes(hoyMes, -i); ult.push({ m, v: cobradoEnMes(m) }); }
     const maxV = Math.max(1, ...ult.map((x) => x.v));
     if (ult.some((x) => x.v)) {
-      wrap.append(el('section', { class: 'blk' }, el('h2', { text: 'Últimos 6 meses' }),
+      wrap.append(el('section', { class: 'blk' }, el('h2', { text: 'Cobrado, últimos 6 meses' }),
         ...ult.map((x) => barra(MESES[+x.m.slice(5, 7) - 1].slice(0, 3), x.v, x.v / maxV, x.v ? fmt(x.v) : '-', x.m === mes))));
     }
 

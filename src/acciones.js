@@ -2,6 +2,7 @@
 
 import { el, toast, fechaFmt, addDays, fmt, limpiarNombreArchivo, todayISO, stampISO, telFmt } from './util.js';
 import { db, guardarCfg, guardarTrabajo, clienteDejoResena } from './store.js';
+import { montoGuarda, diasGuarda, sena } from './cuentas.js';
 import { RESULTADOS, equipoNombre } from './catalog.js';
 import { prepararLogos, drawLabel, rotarParaImpresora, renderA4, equipoTexto } from './render/recepcion.js';
 import { canvasToPdf, toBlobP, fuentesListas } from './render/canvas.js';
@@ -134,7 +135,9 @@ export function datosInforme(t) {
     tareas, repuestos: inf.repuestos.filter((r) => (r.nombre || '').trim()),
     datosEscritorio: !!inf.datosEscritorio,
     pruebas: inf.pruebas, recomendaciones: recs,
-    total: inf.total, mostrarTotal: inf.mostrarTotal,
+    total: inf.total == null ? null : inf.total + montoGuarda(t), guarda: inf.total == null ? 0 : montoGuarda(t), diasGuarda: diasGuarda(t),
+    sena: sena(t), pagado: !!(t.pago && t.pago.pagado), garantiaDe: t.garantiaDe ? t.garantiaDe.orden : null,
+    mostrarTotal: inf.mostrarTotal,
     garantiaDias: n.garantiaDias, garantiaHasta: fechaFmt(addDays(inf.fechaEntrega || todayISO(), n.garantiaDias)),
     wsp: n.wsp.trim(), ig: n.ig.trim(), web: n.web.trim(), resenas: (n.resenas || '').trim(),
   };
@@ -212,6 +215,24 @@ export function mensajeInforme(t) {
   ].join('\n');
 }
 export function avisarListo(t) { abrirWhatsApp(t.cliente.tel, mensajeListo(t)); }
+
+// Aviso de retiro: antes del plazo es un recordatorio; pasado el plazo, avisa que corre la guarda (queda como intimación)
+export function mensajeGuarda(t, { desde, porDia, dias, monto }) {
+  const nom = primerNombre(t);
+  const L = ['¡Hola' + (nom ? ' ' + nom : '') + '! Soy Mario, de Mario PC 👋', ''];
+  const listo = fechaFmt(String(t.listoDesde || '').slice(0, 10));
+  if (dias > 0) {
+    L.push('Te escribo porque tu ' + equipoCorto(t) + ' está ' + listoPara(t) + ' para retirar desde el ' + listo + '. Como pasó el plazo de ' + db.cfg.retiro.dias +
+      ' días que figura en el comprobante de recepción, desde el ' + fechaFmt(desde) + ' corre el cargo por guarda de ' + fmt(porDia) + ' por día.');
+    L.push('', 'Hasta hoy son ' + dias + (dias === 1 ? ' día' : ' días') + ' (' + fmt(monto) + '). Te pido que me avises cuándo pasás a retirarlo así lo coordinamos.');
+  } else {
+    L.push('Te recuerdo que tu ' + equipoCorto(t) + ' está ' + listoPara(t) + ' para retirar desde el ' + listo + '. Tenés tiempo hasta el ' + fechaFmt(addDays(desde, -1)) +
+      '; después corre el cargo por guarda de ' + fmt(porDia) + ' por día que figura en el comprobante.');
+    L.push('', '¿Qué día te queda cómodo para pasar?');
+  }
+  L.push('', 'Mario PC');
+  return L.join('\n');
+}
 
 // Recordatorio de la limpieza anual, un año después de la entrega
 export function mensajeRecordatorio(t) {
