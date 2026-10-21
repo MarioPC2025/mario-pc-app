@@ -1,9 +1,9 @@
 // Todo lo que la app guarda queda en el teléfono (SharedPreferences de Android).
-// Nada se manda a internet. El respaldo es un archivo que Mario exporta a mano.
+// Lo único que sale es el respaldo: a mano (archivo) o automático a tu Google Drive (ver drive.js).
 
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
-import { uid, stampISO, todayISO } from './util.js';
+import { uid, stampISO, todayISO, waNumber } from './util.js';
 
 const NATIVE = Capacitor.isNativePlatform();
 const K = { cfg: 'cfg', contador: 'contador', trabajos: 'trabajos', presupuestos: 'presupuestos', meta: 'meta' };
@@ -31,6 +31,10 @@ export function defaultCfg() {
         pantalla: { celular: 30000, notebook: 40000 },
         reparacion: { aio: 40000, celular: 30000, escritorio: 40000, notebook: 40000 },
         ssd: { aio: 75000, escritorio: 75000, notebook: 75000 },
+        limpieza: { aio: 20000, escritorio: 20000, notebook: 20000 },
+        windows: {},
+        respaldo: { aio: 20000, celular: 20000, escritorio: 20000, notebook: 20000 },
+        componentes: { aio: 20000, escritorio: 20000, notebook: 20000 },
       },
       repuestos: [
         { id: 'd2', nombre: 'SSD 480 GB', precio: null },
@@ -40,10 +44,10 @@ export function defaultCfg() {
         { id: 'd6', nombre: 'Pantalla celular', precio: null },
         { id: 'd7', nombre: 'Batería notebook', precio: null },
         { id: 'd8', nombre: 'Batería celular', precio: null },
-        { id: 'iqw94rw4', nombre: 'Despiece (cambio de componentes)', precio: 70000 },
-        { id: 'ivpb8vnt', nombre: 'Descuento', precio: -40000 },
       ],
     },
+    tareasPropias: [],
+    drive: { url: '' },
     presupuesto: { validez: 7, pagos: 'Efectivo o Mercado Pago' },
     etiqueta: { largo: 80, giro: 'ccw', tel: true },
     impresora: { deviceId: '', nombre: '', modo: 'normal', intensidad: 'intensa' },
@@ -59,7 +63,8 @@ function normalizeCfg(raw) {
   for (const k of ['wsp', 'ig', 'web', 'resenas']) if (typeof n[k] === 'string') o.negocio[k] = n[k];
   if (isFinite(+n.garantiaDias) && n.garantiaDias !== '' && n.garantiaDias != null) o.negocio.garantiaDias = Math.max(0, Math.min(365, +n.garantiaDias));
   const p = raw.precios || {};
-  if (p.mo && typeof p.mo === 'object') o.precios.mo = p.mo;
+  // los servicios nuevos que no estaban en el respaldo arrancan con el precio de fábrica
+  if (p.mo && typeof p.mo === 'object') o.precios.mo = Object.assign({}, d.precios.mo, p.mo);
   if (Array.isArray(p.repuestos)) {
     o.precios.repuestos = p.repuestos.filter((r) => r && typeof r === 'object').map((r) => ({
       id: String(r.id || uid('r')), nombre: String(r.nombre || ''),
@@ -73,6 +78,9 @@ function normalizeCfg(raw) {
   if ([60, 70, 80, 90, 100].includes(+e.largo)) o.etiqueta.largo = +e.largo;
   if (e.giro === 'cw' || e.giro === 'ccw') o.etiqueta.giro = e.giro;
   if (typeof e.tel === 'boolean') o.etiqueta.tel = e.tel;
+  if (Array.isArray(raw.tareasPropias)) o.tareasPropias = raw.tareasPropias.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim());
+  const dr = raw.drive || {};
+  if (typeof dr.url === 'string') o.drive.url = dr.url.trim();
   const im = raw.impresora || {};
   if (typeof im.deviceId === 'string') o.impresora.deviceId = im.deviceId;
   if (typeof im.nombre === 'string') o.impresora.nombre = im.nombre;
@@ -87,7 +95,7 @@ export const db = {
   ultimo: ULTIMO_DE_FABRICA,
   trabajos: [],
   presupuestos: [],
-  meta: { primeraVez: true, ultimoBackup: null },
+  meta: { primeraVez: true, ultimoBackup: null, ultimoDrive: null, errorDrive: null, pendienteDrive: false, migracion: 0 },
 };
 
 export async function cargar() {
@@ -96,9 +104,51 @@ export async function cargar() {
   db.ultimo = c && isFinite(+c.ultimo) ? +c.ultimo : ULTIMO_DE_FABRICA;
   db.trabajos = await getJSON(K.trabajos, []);
   db.presupuestos = await getJSON(K.presupuestos, []);
-  db.meta = Object.assign({ primeraVez: true, ultimoBackup: null }, await getJSON(K.meta, {}));
+  db.meta = Object.assign({ primeraVez: true, ultimoBackup: null, ultimoDrive: null, errorDrive: null, pendienteDrive: false, migracion: 0 }, await getJSON(K.meta, {}));
   if (!Array.isArray(db.trabajos)) db.trabajos = [];
   if (!Array.isArray(db.presupuestos)) db.presupuestos = [];
+  if (migrar(db.meta.migracion < 1)) await guardarTodoYa();
+}
+
+/* ---------- Arreglos de datos de versiones anteriores ---------- */
+// conCfg: además de las fichas, pasa "Despiece" y "Descuento" de repuestos a servicio y descuento.
+// Devuelve true si cambió algo.
+function migrar(conCfg) {
+  let cambio = false;
+  for (const t of db.trabajos) {
+    if (t.claveValor == null) { t.claveValor = ''; cambio = true; }
+    // El PIN anotado en Observaciones pasa al campo privado (o se borra si el equipo ya se entregó)
+    if (t.clave === 'pin' && /^\s*\d{3,10}\s*$/.test(t.obs || '')) {
+      if (t.estado !== 'entregado' && !t.claveValor) t.claveValor = t.obs.trim();
+      t.obs = ''; cambio = true;
+    }
+    if (t.estado === 'entregado' && t.claveValor) { t.claveValor = ''; cambio = true; }
+    // Con el informe ya armado, el equipo está listo
+    if (t.informe && t.informe.generado && (t.estado === 'recibido' || t.estado === 'en_curso')) { t.estado = 'listo'; cambio = true; }
+  }
+  if (conCfg) {
+    const reps = db.cfg.precios.repuestos;
+    const desp = reps.find((r) => /^despiece/i.test(r.nombre.trim()));
+    const desc = reps.find((r) => /^descuento$/i.test(r.nombre.trim()));
+    if (desp && typeof desp.precio === 'number' && desp.precio > 0) {
+      db.cfg.precios.mo.componentes = { aio: desp.precio, escritorio: desp.precio, notebook: desp.precio };
+    }
+    for (const p of db.presupuestos) {
+      if (desp && p.rep && p.rep[desp.id]) {
+        const d = (p.devices || []).find((x) => x.tipo !== 'celular');
+        if (d && !d.svcs.includes('componentes')) d.svcs.push('componentes');
+        delete p.rep[desp.id];
+      }
+      if (desc && p.rep && p.rep[desc.id]) {
+        p.descuento = Math.abs((desc.precio || 0) * p.rep[desc.id]) || null;
+        delete p.rep[desc.id];
+      }
+    }
+    db.cfg.precios.repuestos = reps.filter((r) => r !== desp && r !== desc);
+    db.meta.migracion = 1;
+    cambio = true;
+  }
+  return cambio;
 }
 
 // Guardados con un pequeño retardo para no escribir en cada tecla
@@ -107,9 +157,11 @@ function guardarLuego(key, fn, ms = 400) {
   clearTimeout(timers[key]);
   timers[key] = setTimeout(() => setJSON(key, fn()), ms);
 }
-export const guardarCfg = () => guardarLuego(K.cfg, () => db.cfg);
-export const guardarTrabajos = () => guardarLuego(K.trabajos, () => db.trabajos, 150);
-export const guardarPresupuestos = () => guardarLuego(K.presupuestos, () => db.presupuestos, 150);
+// Cualquier cambio deja pendiente el próximo respaldo a Drive
+function hayCambios() { if (!db.meta.pendienteDrive) { db.meta.pendienteDrive = true; guardarMeta(); } }
+export const guardarCfg = () => { hayCambios(); guardarLuego(K.cfg, () => db.cfg); };
+export const guardarTrabajos = () => { hayCambios(); guardarLuego(K.trabajos, () => db.trabajos, 150); };
+export const guardarPresupuestos = () => { hayCambios(); guardarLuego(K.presupuestos, () => db.presupuestos, 150); };
 export const guardarMeta = () => guardarLuego(K.meta, () => db.meta, 50);
 export function guardarUltimo(n) {
   db.ultimo = n;
@@ -134,7 +186,7 @@ export function trabajoVacio() {
     estado: 'recibido',
     cliente: { nombre: '', tel: '' },
     equipo: { tipo: 'notebook', marca: '', modelo: '', serie: '' },
-    entrega: '', falla: '', acc: [], accOtro: '', danos: [], danoOtro: '', clave: 'no', obs: '',
+    entrega: '', falla: '', acc: [], accOtro: '', danos: [], danoOtro: '', clave: 'no', claveValor: '', obs: '',
     presupuestoId: null,
     informe: null,
   };
@@ -143,8 +195,8 @@ export function trabajoVacio() {
 export function informeVacio(t) {
   const pres = t.presupuestoId ? db.presupuestos.find((p) => p.id === t.presupuestoId) : null;
   return {
-    resultado: 'reparado', diagnostico: '', tareas: [], tareasOtras: [], repuestos: [],
-    pruebas: [], metricas: [], recomendaciones: [], recomendacionOtra: '',
+    resultado: 'reparado', diagnostico: '', tareas: [], tareasOtras: [], repuestos: [], datosEscritorio: false,
+    pruebas: [], recomendaciones: [], recomendacionOtra: '',
     total: pres && !pres.missing ? pres.total : null, mostrarTotal: true,
     fechaEntrega: todayISO(), generado: null,
   };
@@ -152,6 +204,11 @@ export function informeVacio(t) {
 
 export function guardarTrabajo(t) {
   t.actualizado = stampISO();
+  // La clave del cliente no se guarda una vez que el equipo se entregó
+  if (t.estado === 'entregado' || t.clave === 'no') t.claveValor = '';
+  // Si el presupuesto quedó sin teléfono, se completa con el de la ficha
+  const pres = t.presupuestoId ? db.presupuestos.find((p) => p.id === t.presupuestoId) : null;
+  if (pres && !(pres.tel || '').trim() && t.cliente.tel.trim()) { pres.tel = t.cliente.tel.trim(); guardarPresupuestos(); }
   const i = db.trabajos.findIndex((x) => x.id === t.id);
   if (i < 0) {
     t.creado = t.creado || stampISO();
@@ -167,6 +224,16 @@ export function borrarTrabajo(id) {
 }
 export const trabajoPorId = (id) => db.trabajos.find((x) => x.id === id) || null;
 
+// Otros trabajos del mismo cliente (mismo número de WhatsApp), del más nuevo al más viejo
+export function trabajosDelCliente(tel, menosId) {
+  const n = waNumber(tel);
+  if (!n) return [];
+  return db.trabajos.filter((x) => x.id !== menosId && waNumber(x.cliente.tel) === n)
+    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+}
+// ¿Este cliente ya dejó una reseña en Google en algún trabajo?
+export const clienteDejoResena = (t) => trabajosDelCliente(t.cliente.tel, t.id).some((x) => x.resenaDejo) || !!t.resenaDejo;
+
 /* ---------- Presupuestos ---------- */
 export function guardarPresupuesto(p) {
   p.actualizado = stampISO();
@@ -180,10 +247,13 @@ export function borrarPresupuesto(id) {
 }
 
 /* ---------- Respaldo ---------- */
+// Las claves de los clientes nunca salen del teléfono: el respaldo va sin ellas.
 export function exportarRespaldo() {
   return {
     app: 'mariopc-taller', formato: 1, exportado: stampISO(),
-    cfg: db.cfg, ultimo: db.ultimo, trabajos: db.trabajos, presupuestos: db.presupuestos,
+    cfg: db.cfg, ultimo: db.ultimo,
+    trabajos: db.trabajos.map((t) => (t.claveValor ? Object.assign({}, t, { claveValor: '' }) : t)),
+    presupuestos: db.presupuestos,
   };
 }
 export function marcarRespaldo() {
@@ -196,5 +266,6 @@ export async function importarRespaldo(data) {
   db.ultimo = isFinite(+data.ultimo) ? +data.ultimo : db.ultimo;
   db.trabajos = data.trabajos;
   db.presupuestos = Array.isArray(data.presupuestos) ? data.presupuestos : [];
+  migrar(true);
   await guardarTodoYa();
 }

@@ -9,11 +9,25 @@ export const EQUIPOS = [
 export const equipoNombre = (id) => (EQUIPOS.find((e) => e.id === id) || { nombre: 'Equipo' }).nombre;
 
 export const SERVICIOS = [
+  { id: 'limpieza', nombre: 'Limpieza interna', aplica: ['notebook', 'escritorio', 'aio'] },
+  { id: 'windows', nombre: 'Reinstalación de Windows y programas básicos', aplica: ['notebook', 'escritorio', 'aio'] },
+  { id: 'respaldo', nombre: 'Respaldo de datos', aplica: ['notebook', 'escritorio', 'aio', 'celular'] },
   { id: 'ssd', nombre: 'Cambio de HDD a SSD', aplica: ['notebook', 'escritorio', 'aio'] },
+  { id: 'componentes', nombre: 'Cambio de componentes', aplica: ['notebook', 'escritorio', 'aio'] },
   { id: 'reparacion', nombre: 'Reparación', aplica: ['notebook', 'escritorio', 'aio', 'celular'] },
   { id: 'pantalla', nombre: 'Cambio de pantalla', aplica: ['notebook', 'aio', 'celular'] },
   { id: 'bateria', nombre: 'Cambio de batería', aplica: ['notebook', 'celular'] },
 ];
+// Tareas del informe que se tildan solas según los servicios del presupuesto aprobado
+export const TAREAS_POR_SERVICIO = {
+  limpieza: ['Limpieza interna completa', 'Cambio de pasta térmica'],
+  windows: ['Instalación limpia de Windows', 'Actualización de drivers'],
+  respaldo: ['Copia de seguridad de archivos'],
+  ssd: ['Cambio de disco a SSD', 'Clonado del sistema al disco nuevo'],
+  componentes: ['Armado y cambio de componentes'],
+  pantalla: ['Cambio de pantalla'],
+  bateria: ['Cambio de batería'],
+};
 
 export const ACCESORIOS = ['Cargador', 'Funda o bolso', 'Mouse', 'Cable', 'Batería', 'SIM o SD'];
 
@@ -65,6 +79,8 @@ export const TAREAS = [
   'Eliminación de virus y programas basura',
   'Optimización del inicio de Windows',
   'Ampliación de memoria RAM',
+  'Cambio de motherboard',
+  'Armado y cambio de componentes',
   'Cambio de pantalla',
   'Cambio de batería',
   'Cambio de teclado',
@@ -87,21 +103,21 @@ export const PRUEBAS = [
   'Windows actualizado',
 ];
 
-export const METRICAS_SUGERIDAS = [
-  'Tiempo de encendido',
-  'Temperatura del procesador',
-  'Salud del disco',
-  'Espacio libre en disco',
-  'Programas al inicio',
+// aplica: tipos de equipo donde tiene sentido. auto: se tilda sola al armar un informe nuevo para ese tipo.
+export const REC_LIMPIEZA = 'Traé el equipo a una limpieza interna una vez por año.';
+export const RECOMENDACIONES_DEF = [
+  { t: 'Hacé una copia de seguridad de tus archivos una vez por mes.', aplica: ['notebook', 'escritorio', 'aio', 'celular'], auto: ['celular'] },
+  { t: REC_LIMPIEZA, aplica: ['notebook', 'escritorio', 'aio'], auto: ['notebook', 'escritorio', 'aio'] },
+  { t: 'Usalo sobre una superficie dura, no sobre la cama o almohadones.', aplica: ['notebook'], auto: ['notebook'] },
+  { t: 'Evitá cargarlo con cargadores genéricos.', aplica: ['notebook', 'celular'], auto: ['celular'] },
+  { t: 'No dejes el equipo enchufado al 100% todo el día.', aplica: ['notebook', 'celular'], auto: ['notebook'] },
+  { t: 'Instalá programas solo desde sus páginas oficiales.', aplica: ['notebook', 'escritorio', 'aio'], auto: ['notebook', 'escritorio', 'aio'] },
 ];
+export const RECOMENDACIONES = RECOMENDACIONES_DEF.map((r) => r.t);
+export const recomendacionesPara = (tipo) => RECOMENDACIONES_DEF.filter((r) => r.aplica.includes(tipo)).map((r) => r.t);
+export const recomendacionesAuto = (tipo) => RECOMENDACIONES_DEF.filter((r) => r.auto.includes(tipo)).map((r) => r.t);
 
-export const RECOMENDACIONES = [
-  'Hacé una copia de seguridad de tus archivos una vez por mes.',
-  'Traé el equipo a una limpieza interna una vez por año.',
-  'Usalo sobre una superficie dura, no sobre la cama o almohadones.',
-  'Evitá cargarlo con cargadores genéricos.',
-  'No dejes el equipo enchufado al 100% todo el día.',
-  'Instalá programas solo desde sus páginas oficiales.',
-];
+// Frase del informe cuando quedan los archivos del cliente en el escritorio
+export const CARPETA_DATOS = 'Datos recuperados';
 
 export const REP_DEF = ['SSD 240 GB', 'SSD 480 GB', 'SSD 960 GB', 'Memoria RAM', 'Pantalla notebook', 'Pantalla celular', 'Batería notebook', 'Batería celular'];

@@ -1,8 +1,8 @@
 // Recepción de equipos: la ficha que antes era el artefacto "Recepción Mario PC".
 
-import { el, campo, debounce, toast, addDays, sumarHabiles, diaCorto } from '../util.js';
-import { db, trabajoVacio, guardarTrabajo, trabajoPorId, siguienteOrden } from '../store.js';
-import { EQUIPOS, ACCESORIOS, DANOS, CLAVES } from '../catalog.js';
+import { el, campo, debounce, toast, addDays, sumarHabiles, diaCorto, fechaCorta } from '../util.js';
+import { db, trabajoVacio, guardarTrabajo, trabajoPorId, siguienteOrden, trabajosDelCliente } from '../store.js';
+import { EQUIPOS, ACCESORIOS, DANOS, CLAVES, equipoNombre } from '../catalog.js';
 import { lienzoEtiqueta, lienzoComprobante } from '../acciones.js';
 import { ir, atras, setTitulo } from '../nav.js';
 
@@ -29,7 +29,23 @@ export const vistaRecepcion = {
 
     // Cliente
     const nombre = campo('Nombre y apellido', { maxlength: '60', value: t.cliente.nombre, autocapitalize: 'words' }, (v) => { t.cliente.nombre = v; cambio(); });
-    const tel = campo('Teléfono / WhatsApp', { type: 'tel', inputmode: 'tel', maxlength: '24', value: t.cliente.tel, placeholder: '11 5555 1234' }, (v) => { t.cliente.tel = v; cambio(); });
+    const tel = campo('Teléfono / WhatsApp', { type: 'tel', inputmode: 'tel', maxlength: '24', value: t.cliente.tel, placeholder: '11 5555 1234' }, (v) => { t.cliente.tel = v; cambio(); pintarHistorial(); });
+    // Si el cliente ya vino antes, se avisa (y se puede completar el nombre)
+    const historial = el('div', { class: 'hist-hint', hidden: true });
+    function pintarHistorial() {
+      const prev = trabajosDelCliente(t.cliente.tel, t.id);
+      historial.hidden = !prev.length;
+      if (!prev.length) { historial.replaceChildren(); return; }
+      const u = prev[0];
+      const txt = 'Ya vino ' + (prev.length === 1 ? '1 vez' : prev.length + ' veces') + '. Última: N° ' + u.orden + ', ' +
+        [equipoNombre(u.equipo.tipo), u.equipo.marca].filter((x) => String(x).trim()).join(' ') + ' (' + fechaCorta(u.fecha) + ').';
+      const nom = u.cliente.nombre.trim();
+      historial.replaceChildren(el('p', { text: txt }),
+        nom && !t.cliente.nombre.trim() ? el('button', { type: 'button', class: 'btn small', text: 'Usar nombre: ' + nom, onclick: () => {
+          t.cliente.nombre = nom; nombre.input.value = nom; cambio(); pintarHistorial();
+        } }) : null);
+    }
+    pintarHistorial();
 
     // Equipo
     const tipos = radios('tipo-eq', EQUIPOS, () => t.equipo.tipo, (v) => { t.equipo.tipo = v; cambio(); });
@@ -56,8 +72,16 @@ export const vistaRecepcion = {
     const accOtro = campo('Otro accesorio', { maxlength: '40', value: t.accOtro }, (v) => { t.accOtro = v; cambio(); });
     const danos = chips(DANOS, t.danos, cambio);
     const danoOtro = campo('Otro daño', { maxlength: '40', value: t.danoOtro, placeholder: 'Algo corto que no esté en la lista' }, (v) => { t.danoOtro = v; cambio(); });
-    const claves = radios('clave', CLAVES, () => t.clave, (v) => { t.clave = v; cambio(); });
-    const obs = campo('Observaciones', { multiline: true, rows: '2', maxlength: '200', value: t.obs, placeholder: 'Opcional. Sale solo en el comprobante A4' }, (v) => { t.obs = v; cambio(); });
+    if (t.claveValor == null) t.claveValor = '';
+    const claveCampo = campo('La clave (solo queda en la app)', { maxlength: '60', value: t.claveValor, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' }, (v) => { t.claveValor = v; sucio = true; });
+    function pintarClave() {
+      claveCampo.wrap.hidden = t.clave === 'no';
+      claveCampo.input.setAttribute('inputmode', t.clave === 'pin' ? 'numeric' : 'text');
+      claveCampo.input.placeholder = t.clave === 'pin' ? 'Ej: 1234' : t.clave === 'patron' ? 'Ej: L desde arriba a la izquierda' : 'La contraseña del equipo';
+    }
+    const claves = radios('clave', CLAVES, () => t.clave, (v) => { t.clave = v; if (v === 'no') { t.claveValor = ''; claveCampo.input.value = ''; } pintarClave(); cambio(); });
+    pintarClave();
+    const obs = campo('Observaciones', { multiline: true, rows: '2', maxlength: '200', value: t.obs, placeholder: 'Opcional. Sale en el comprobante A4: no anotes la clave acá' }, (v) => { t.obs = v; cambio(); });
 
     // Vista previa
     const pvTabs = el('div', { class: 'seg2', role: 'tablist' });
@@ -92,13 +116,13 @@ export const vistaRecepcion = {
 
     main.append(el('div', { class: 'wrap form' },
       el('div', { class: 'two head2' }, orden.wrap, fecha.wrap),
-      bloque('Cliente', el('div', { class: 'two' }, nombre.wrap, tel.wrap)),
+      bloque('Cliente', el('div', { class: 'two' }, nombre.wrap, tel.wrap), historial),
       bloque('Equipo', tipos, el('div', { class: 'two' }, marca.wrap, modelo.wrap), serie.wrap),
       bloque('Falla', falla.wrap),
       bloque('Entrega prometida', atajos, entrega.wrap, el('p', { class: 'hint', text: 'Opcional. Si la ponés, sale grande en la etiqueta.' })),
       bloque('Accesorios que deja', acc, accOtro.wrap, el('p', { class: 'hint', text: 'Si no tildás nada, figura "Ninguno".' })),
       bloque('Estado físico al recibir', danos, danoOtro.wrap, el('p', { class: 'hint', text: 'Si no tildás nada, figura "Sin daños visibles".' })),
-      bloque('Clave de acceso', claves, el('p', { class: 'hint', text: 'Solo se anota si tiene o no. La clave no se escribe ni se imprime.' })),
+      bloque('Clave de acceso', claves, claveCampo.wrap, el('p', { class: 'hint', text: 'La clave no sale en la etiqueta, el comprobante ni el respaldo, y se borra sola cuando marcás el equipo como entregado.' })),
       bloque('Observaciones', obs.wrap),
       bloque('Vista previa', pvTabs, pvSlot)),
       el('div', { class: 'bar' }, el('div', { class: 't' }, el('span', { class: 'lbl', text: editando ? 'Editando' : 'Nueva ficha' }), barN), guardarBtn));

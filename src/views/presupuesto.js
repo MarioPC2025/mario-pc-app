@@ -12,9 +12,24 @@ let q = nuevo();
 let modo = 'nuevo';
 let msgEditado = null;
 
+function filaVacia() { return { id: uid('l'), nombre: '', precio: null }; }
 function nuevo() {
-  return { id: null, nombre: '', tel: '', devices: [{ id: uid('e'), tipo: 'notebook', detalle: '', svcs: [] }], rep: {}, extras: [], libres: [] };
+  return {
+    id: null, nombre: '', tel: '', devices: [{ id: uid('e'), tipo: 'notebook', detalle: '', svcs: [] }],
+    rep: {}, repPrecio: {}, repOtros: [filaVacia()], extras: [filaVacia()], libres: [], descuento: null,
+  };
 }
+// Presupuestos guardados con versiones anteriores
+function completar(p) {
+  return {
+    id: p.id, nombre: p.nombre || '', tel: p.tel || '', devices: JSON.parse(JSON.stringify(p.devices || [])),
+    rep: Object.assign({}, p.rep), repPrecio: Object.assign({}, p.repPrecio),
+    repOtros: JSON.parse(JSON.stringify(p.repOtros || [])), extras: JSON.parse(JSON.stringify(p.extras || [])),
+    libres: JSON.parse(JSON.stringify(p.libres || [])), descuento: typeof p.descuento === 'number' ? p.descuento : null,
+  };
+}
+// Precio del repuesto en este presupuesto: el que pusiste acá, o el de Ajustes
+const precioRep = (r) => (typeof q.repPrecio[r.id] === 'number' ? q.repPrecio[r.id] : r.precio);
 
 const precios = () => db.cfg.precios;
 function moPrice(s, e) { const v = precios().mo[s] && precios().mo[s][e]; return typeof v === 'number' ? v : null; }
@@ -44,8 +59,10 @@ export function construir() {
     if (nm || l.precio != null) lines.push({ tipo, nombre: nm || def, qty: 1, precio: l.precio });
   });
   libres(q.extras, 'Servicio adicional', 'extra');
-  precios().repuestos.forEach((r) => { const n = q.rep[r.id] || 0; if (n > 0) lines.push({ tipo: 'rep', nombre: r.nombre || 'Repuesto', qty: n, precio: r.precio }); });
+  precios().repuestos.forEach((r) => { const n = q.rep[r.id] || 0; if (n > 0) lines.push({ tipo: 'rep', nombre: r.nombre || 'Repuesto', qty: n, precio: precioRep(r) }); });
+  libres(q.repOtros, 'Repuesto', 'rep');
   libres(q.libres, 'Ítem', 'libre');
+  if (q.descuento) lines.push({ tipo: 'desc', nombre: 'Descuento', qty: 1, precio: -Math.abs(q.descuento) });
   lines.forEach((l) => { if (l.precio == null) missing++; else total += l.precio * l.qty; });
   return { lines, total, missing };
 }
@@ -128,7 +145,7 @@ function editor(wrap, pintar) {
     totalEl.textContent = barTotal.textContent = fmt(b.total);
     totalLbl.textContent = barLbl.textContent = lab;
     falta.hidden = !b.missing;
-    if (b.missing) falta.textContent = 'Falta el precio de ' + b.missing + (b.missing > 1 ? ' ítems' : ' ítem') + '. Cargalo en Ajustes → Precios.';
+    if (b.missing) falta.textContent = 'Falta el precio de ' + b.missing + (b.missing > 1 ? ' ítems' : ' ítem') + '. Cargalo acá o en Ajustes → Precios.';
     if (msgEditado == null) { ta.value = mensaje(); reset.hidden = true; } else ta.value = msgEditado;
     const n = waNumber(q.tel);
     telHint.textContent = !q.tel.trim() ? 'Sin número, WhatsApp te deja elegir el contacto.' : n ? 'Se abre el chat con +' + n.slice(0, 2) + ' ' + n.charAt(2) + ' ' + n.slice(3) : 'No pude interpretar el número. Probá con código de área, sin 0 ni 15.';
@@ -176,7 +193,7 @@ function editor(wrap, pintar) {
   }
   pintarEquipos();
 
-  // Repuestos con + y −
+  // Repuestos con + y −. Al sumarlo aparece el precio para cargarlo según lo que conseguiste.
   const repBox = el('div');
   function pintarRepuestos() {
     const items = precios().repuestos.filter((r) => r.nombre.trim());
@@ -185,12 +202,14 @@ function editor(wrap, pintar) {
     items.forEach((r) => {
       const out = el('output', { text: String(q.rep[r.id] || 0) });
       const row = el('div', { class: 'rep' + ((q.rep[r.id] || 0) > 0 ? ' on' : '') });
+      const precioBox = el('div', { class: 'rep-precio', hidden: !(q.rep[r.id] > 0) },
+        dinero(precioRep(r), (v) => { if (v == null) delete q.repPrecio[r.id]; else q.repPrecio[r.id] = v; actualizar(); }, { 'aria-label': 'Precio de ' + r.nombre, placeholder: 'Precio c/u' }));
       const set = (v) => {
         v = Math.max(0, Math.min(20, v));
         if (v === 0) delete q.rep[r.id]; else q.rep[r.id] = v;
-        out.textContent = String(v); row.classList.toggle('on', v > 0); actualizar();
+        out.textContent = String(v); row.classList.toggle('on', v > 0); precioBox.hidden = v === 0; actualizar();
       };
-      row.append(el('div', { class: 'info' }, el('span', { class: 'nm', text: r.nombre }), el('span', { class: 'pr', text: r.precio == null ? 'sin precio' : fmt(r.precio) })),
+      row.append(el('div', { class: 'info' }, el('span', { class: 'nm', text: r.nombre }), precioBox),
         el('div', { class: 'stepper' },
           el('button', { type: 'button', 'aria-label': 'Quitar uno: ' + r.nombre, text: '−', onclick: () => set((q.rep[r.id] || 0) - 1) }), out,
           el('button', { type: 'button', 'aria-label': 'Agregar uno: ' + r.nombre, text: '+', onclick: () => set((q.rep[r.id] || 0) + 1) })));
@@ -199,8 +218,11 @@ function editor(wrap, pintar) {
   }
   pintarRepuestos();
 
-  const extras = filas(q.extras, 'servicio', 'Ej: instalación de Windows', actualizar);
-  const libres = filas(q.libres, 'ítem', 'Ej: envío o descuento', actualizar);
+  const extras = filas(q.extras, 'servicio', 'Otro servicio', actualizar);
+  const repOtros = filas(q.repOtros, 'repuesto', 'Otro repuesto', actualizar);
+  const libres = q.libres.length ? filas(q.libres, 'ítem', 'Ej: envío', actualizar) : null;
+  const descuento = el('div', { class: 'desc-row' }, el('span', { text: 'Descuento' }),
+    dinero(q.descuento, (v) => { q.descuento = v == null || v === 0 ? null : Math.abs(v); actualizar(); }, { 'aria-label': 'Descuento' }));
 
   const resumen = el('section', { class: 'panel', id: 'resumen' }, el('h2', { text: 'Resumen' }), lines, el('div', { class: 'total' }, totalLbl, totalEl), falta);
 
@@ -227,7 +249,8 @@ function editor(wrap, pintar) {
     if (!b.lines.length) { toast('El presupuesto está vacío'); return; }
     const p = guardarActual('aceptado');
     const d = q.devices[0];
-    const svcs = SERVICIOS.filter((s) => d.svcs.includes(s.id)).map((s) => s.nombre);
+    const svcs = SERVICIOS.filter((s) => d.svcs.includes(s.id)).map((s) => s.nombre)
+      .concat(q.extras.map((x) => (x.nombre || '').trim()).filter(Boolean));
     const det = d.detalle.trim().split(/\s+/);
     const prefill = {
       cliente: { nombre: q.nombre.trim(), tel: q.tel.trim() },
@@ -246,9 +269,11 @@ function editor(wrap, pintar) {
         el('div', { class: 'field' }, el('label', { for: 'q-tel', text: 'WhatsApp del cliente' }), tel)), telHint),
     el('section', { class: 'blk' }, el('h2', { text: 'Equipo y servicios' }), devBox,
       el('button', { type: 'button', class: 'btn ghost small', text: '+ Agregar otro equipo', onclick: () => { q.devices.push({ id: uid('e'), tipo: 'notebook', detalle: '', svcs: [] }); pintarEquipos(); actualizar(); } })),
-    el('section', { class: 'blk' }, el('h2', { text: 'Servicios adicionales' }), el('p', { class: 'hint', text: 'Para trabajos que no están en la lista, como instalar Windows o una limpieza.' }), extras),
-    el('section', { class: 'blk' }, el('h2', { text: 'Repuestos' }), repBox),
-    el('section', { class: 'blk' }, el('h2', { text: 'Otros ítems' }), el('p', { class: 'hint', text: 'Con un monto negativo podés restar.' }), libres),
+    el('section', { class: 'blk' }, el('h2', { text: 'Otro servicio' }), el('p', { class: 'hint', text: 'Para lo que no está en la lista de arriba.' }), extras),
+    el('section', { class: 'blk' }, el('h2', { text: 'Repuestos' }), el('p', { class: 'hint', text: 'Sumá el repuesto y poné el precio que conseguiste. Si lo dejás vacío, sale "a confirmar".' }), repBox,
+      el('h3', { class: 'sub', text: 'Otro repuesto' }), repOtros),
+    ...(libres ? [el('section', { class: 'blk' }, el('h2', { text: 'Otros ítems' }), libres)] : []),
+    el('section', { class: 'blk' }, el('h2', { text: 'Descuento' }), descuento, el('p', { class: 'hint', text: 'Se resta del total. Ponelo en pesos.' })),
     resumen,
     el('section', { class: 'msgbox' }, el('label', { class: 'lbl', text: 'Mensaje' }), ta, reset,
       el('div', { class: 'actions' },
@@ -287,7 +312,9 @@ function guardados(wrap, pintar) {
   db.presupuestos.forEach((p) => {
     lista.append(el('div', { class: 'card pres' },
       el('button', { type: 'button', class: 'pres-main', onclick: () => {
-        q = { id: p.id, nombre: p.nombre, tel: p.tel, devices: JSON.parse(JSON.stringify(p.devices)), rep: Object.assign({}, p.rep), extras: JSON.parse(JSON.stringify(p.extras)), libres: JSON.parse(JSON.stringify(p.libres)) };
+        q = completar(p);
+        if (!q.extras.length) q.extras.push(filaVacia());
+        if (!q.repOtros.length) q.repOtros.push(filaVacia());
         msgEditado = null; modo = 'nuevo'; pintar(); window.scrollTo(0, 0);
       } },
         el('span', { class: 'job-cli', text: p.nombre.trim() || 'Sin nombre' }),

@@ -11,6 +11,8 @@ import { vistaRecepcion } from './views/recepcion.js';
 import { vistaInforme } from './views/informe.js';
 import { vistaPresupuesto } from './views/presupuesto.js';
 import { vistaAjustes } from './views/ajustes.js';
+import { vistaResumen } from './views/resumen.js';
+import { subirADrive } from './drive.js';
 import { fuentesListas } from './render/canvas.js';
 
 registrar('trabajos', vistaTrabajos);
@@ -19,6 +21,7 @@ registrar('recepcion', vistaRecepcion);
 registrar('informe', vistaInforme);
 registrar('presupuesto', vistaPresupuesto);
 registrar('ajustes', vistaAjustes);
+registrar('resumen', vistaResumen);
 
 async function arrancar() {
   await cargar();
@@ -38,7 +41,8 @@ async function arrancar() {
       if (ev.defaultPrevented) return;
       if (!atras()) App.minimizeApp();
     });
-    App.addListener('pause', () => { guardarTodoYa(); });
+    App.addListener('pause', () => { guardarTodoYa().then(() => subirADrive()); });
+    App.addListener('resume', () => { subirADrive(); });
   } else {
     window.addEventListener('beforeunload', () => { guardarTodoYa(); });
   }
@@ -46,6 +50,8 @@ async function arrancar() {
   ir('trabajos', {}, { raiz: true });
   document.body.classList.add('listo');
   if (db.meta.primeraVez) bienvenida();
+  // Respaldo a Drive si quedó algo pendiente
+  setTimeout(() => subirADrive(), 4000);
 }
 
 function bienvenida() {

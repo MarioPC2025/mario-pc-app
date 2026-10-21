@@ -184,7 +184,7 @@ function drawA4(t, cfg, k, firmas = true) {
   row([{ w: 112, label: 'Nombre y apellido', val: dash(t.cliente.nombre) }, { w: 66, label: 'Teléfono', val: dash(t.cliente.tel) }]);
   sec('Equipo');
   row([{ w: 44, label: 'Tipo', val: equipoNombre(t.equipo.tipo) }, { w: 44, label: 'Marca', val: dash(t.equipo.marca) }, { w: 86, label: 'Modelo', val: dash(t.equipo.modelo) }]);
-  row([{ w: 112, label: 'N° de serie / IMEI', val: dash(t.equipo.serie) }, { w: 66, label: 'Clave de acceso', val: t.clave === 'no' ? 'No tiene' : claveNombre(t.clave) + ' (no se anota)' }]);
+  row([{ w: 112, label: 'N° de serie / IMEI', val: dash(t.equipo.serie) }, { w: 66, label: 'Clave de acceso', val: t.clave === 'no' ? 'No tiene' : claveNombre(t.clave) + ' (se borra al entregar)' }]);
   sec('Falla que reporta el cliente');
   F('500', 4.2, FD, k);
   const fl = limitLines(c, wrapLines(c, dash(t.falla), CW - mm(8)), 7, CW - mm(8)), lh = mm(5.8 * k);

@@ -68,6 +68,16 @@ export function waNumber(raw) {
   return '';
 }
 
+// "11 6224-9585" para mostrar (si no lo reconoce, lo deja como está)
+export function telFmt(raw) {
+  const n = waNumber(raw);
+  if (!n) return String(raw || '').trim();
+  const d = n.slice(3);
+  const area = d.startsWith('11') ? 2 : d.length === 10 && /^(2[2-9]|3[4-9])/.test(d) ? 3 : 4;
+  const resto = d.slice(area);
+  return d.slice(0, area) + ' ' + resto.slice(0, resto.length - 4) + '-' + resto.slice(-4);
+}
+
 /* ---------- Fechas (siempre hora de Buenos Aires) ---------- */
 const TZ = 'America/Argentina/Buenos_Aires';
 export function todayISO() {

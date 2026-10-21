@@ -1,7 +1,7 @@
 // Acciones que se usan desde varias pantallas: imprimir, comprobante, informe, avisos por WhatsApp.
 
-import { el, toast, fechaFmt, addDays, fmt, limpiarNombreArchivo, todayISO } from './util.js';
-import { db, guardarCfg } from './store.js';
+import { el, toast, fechaFmt, addDays, fmt, limpiarNombreArchivo, todayISO, stampISO, telFmt } from './util.js';
+import { db, guardarCfg, guardarTrabajo, clienteDejoResena } from './store.js';
 import { RESULTADOS, equipoNombre } from './catalog.js';
 import { prepararLogos, drawLabel, rotarParaImpresora, renderA4, equipoTexto } from './render/recepcion.js';
 import { canvasToPdf, toBlobP, fuentesListas } from './render/canvas.js';
@@ -121,16 +121,18 @@ export async function mandarPorWhatsApp(blob, nombre, opts) {
 /* ---------- Informe técnico ---------- */
 export function datosInforme(t) {
   const inf = t.informe, n = db.cfg.negocio;
+  const pres = t.presupuestoId ? db.presupuestos.find((p) => p.id === t.presupuestoId) : null;
   const res = RESULTADOS.find((r) => r.id === inf.resultado) || RESULTADOS[0];
   const tareas = inf.tareas.concat(inf.tareasOtras.map((x) => x.trim()).filter(Boolean));
   const recs = inf.recomendaciones.concat(inf.recomendacionOtra.trim() ? [inf.recomendacionOtra.trim()] : []);
   return {
     orden: t.orden,
     fechaRecepcion: fechaFmt(t.fecha), fechaEntrega: fechaFmt(inf.fechaEntrega || todayISO()),
-    cliente: t.cliente.nombre.trim(), equipo: equipoTexto(t), serie: t.equipo.serie.trim(),
+    cliente: t.cliente.nombre.trim(), tel: telFmt(t.cliente.tel.trim() || (pres && (pres.tel || '').trim()) || ''),
+    equipo: equipoTexto(t), serie: t.equipo.serie.trim(),
     falla: t.falla.trim(), resultado: res, diagnostico: inf.diagnostico.trim(),
     tareas, repuestos: inf.repuestos.filter((r) => (r.nombre || '').trim()),
-    metricas: inf.metricas.filter((m) => (m.nombre || '').trim() && ((m.antes || '').trim() || (m.despues || '').trim())),
+    datosEscritorio: !!inf.datosEscritorio,
     pruebas: inf.pruebas, recomendaciones: recs,
     total: inf.total, mostrarTotal: inf.mostrarTotal,
     garantiaDias: n.garantiaDias, garantiaHasta: fechaFmt(addDays(inf.fechaEntrega || todayISO(), n.garantiaDias)),
@@ -154,6 +156,7 @@ export function verInforme(t, despues) {
       } },
       { text: 'WhatsApp', primary: true, onclick: async () => {
         const ok = await mandarPorWhatsApp(blob, nombre, { tel: t.cliente.tel, texto: mensajeInforme(t), titulo: 'Informe técnico N° ' + t.orden });
+        if (ok) marcarResenaPedida(t);
         if (despues) despues(ok);
       } },
     ],
@@ -184,8 +187,19 @@ export function mensajeComprobante(t) {
 const LINK_RESENA = 'https://g.page/r/Cae5FNgYFkPuEAE/review';
 // "lista" para notebook / PC / all-in-one (la notebook, la PC), "listo" para celular o equipo sin tipo
 function listoPara(t) { return ['notebook', 'escritorio', 'aio'].includes(t.equipo.tipo) ? 'lista' : 'listo'; }
+// Queda anotado cuándo se le pidió la reseña (si ya dejó una antes, no se le vuelve a pedir)
+export function marcarResenaPedida(t) {
+  if (!t.resenaPedida && !clienteDejoResena(t)) { t.resenaPedida = stampISO(); guardarTrabajo(t); }
+}
 export function mensajeInforme(t) {
   const nom = primerNombre(t);
+  if (clienteDejoResena(t)) return [
+    '¡Hola' + (nom ? ' ' + nom : '') + '! Soy Mario, de Mario PC 👋',
+    '',
+    'Te cuento que tu ' + equipoCorto(t) + ' ya está ' + listoPara(t) + ' y funcionando. Te paso el informe con todo lo que le hice.',
+    '',
+    '¡Gracias por volver a confiar en Mario PC!',
+  ].join('\n');
   return [
     '¡Hola' + (nom ? ' ' + nom : '') + '! Soy Mario, de Mario PC 👋',
     '',
@@ -198,3 +212,15 @@ export function mensajeInforme(t) {
   ].join('\n');
 }
 export function avisarListo(t) { abrirWhatsApp(t.cliente.tel, mensajeListo(t)); }
+
+// Recordatorio de la limpieza anual, un año después de la entrega
+export function mensajeRecordatorio(t) {
+  const nom = primerNombre(t);
+  return [
+    '¡Hola' + (nom ? ' ' + nom : '') + '! Soy Mario, de Mario PC 👋',
+    '',
+    'Ya pasó un año desde que le hice el service a tu ' + equipoCorto(t) + '. Te escribo para recordarte la limpieza interna anual: le saca el polvo, baja la temperatura y hace que te dure más.',
+    '',
+    'Si querés, coordinamos un día y la dejo como nueva. ¡Saludos!',
+  ].join('\n');
+}

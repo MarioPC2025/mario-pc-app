@@ -5,7 +5,8 @@ import { el, campo, dinero, toast, uid, haceCuanto, todayISO, botonConfirmar } f
 import { db, guardarCfg, guardarUltimo, exportarRespaldo, marcarRespaldo, importarRespaldo, trabajoVacio } from '../store.js';
 import { EQUIPOS, SERVICIOS } from '../catalog.js';
 import { conectarImpresora, imprimirEtiqueta } from '../acciones.js';
-import { compartirArchivo } from '../files.js';
+import { compartirArchivo, copiar, abrirUrl } from '../files.js';
+import { CODIGO_SCRIPT, probarLink, subirADrive, urlValida } from '../drive.js';
 import { setTitulo, recargar } from '../nav.js';
 
 const VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
@@ -63,7 +64,19 @@ export const vistaAjustes = {
     pintarRep();
     wrap.append(s({ id: 'precios', nombre: 'Precios' },
       el('p', { class: 'hint', text: 'Mano de obra por servicio y tipo de equipo. Vacío = "a confirmar" en el presupuesto.' }), mo,
-      el('h3', { class: 'sub', text: 'Repuestos' }), rep));
+      el('h3', { class: 'sub', text: 'Repuestos' }),
+      el('p', { class: 'hint', text: 'Podés dejarlos sin precio y ponerlo en cada presupuesto, según lo que consigas.' }), rep));
+
+    // Tareas propias del informe
+    const tps = el('div', { class: 'rows' });
+    function pintarTps() {
+      if (!c.tareasPropias.length) { tps.replaceChildren(el('p', { class: 'hint', text: 'Todavía no agregaste tareas propias. Se suman desde el informe, con "Otra tarea".' })); return; }
+      tps.replaceChildren(...c.tareasPropias.map((x, i) => el('div', { class: 'inline-row tp-row' }, el('span', { text: x }),
+        el('button', { type: 'button', class: 'btn icon', 'aria-label': 'Sacar ' + x, text: '×', onclick: () => { c.tareasPropias.splice(i, 1); guardarCfg(); pintarTps(); } }))));
+    }
+    pintarTps();
+    wrap.append(s({ id: 'informe', nombre: 'Tareas del informe' },
+      el('p', { class: 'hint', text: 'Las que agregaste a mano. Aparecen como tildes en todos los informes.' }), tps));
 
     // Etiqueta
     const largo = el('select', { 'aria-label': 'Largo de la etiqueta' }, ...[60, 70, 80, 90, 100].map((n) => el('option', { value: String(n), text: n + ' mm' })));
@@ -108,6 +121,9 @@ export const vistaAjustes = {
     });
     wrap.append(s({ id: 'num', nombre: 'Numeración' }, prox.wrap, el('p', { class: 'hint', text: 'Sube solo con cada ficha nueva. Cambialo solo si tenés que saltear o corregir números.' })));
 
+    // Respaldo automático en Google Drive
+    wrap.append(s({ id: 'drive', nombre: 'Respaldo en Google Drive' }, ...seccionDrive()));
+
     // Datos
     const ult = db.meta.ultimoBackup;
     const archivo = el('input', { type: 'file', accept: 'application/json,.json', hidden: true });
@@ -124,7 +140,7 @@ export const vistaAjustes = {
       } catch (e) { toast('Ese archivo no es un respaldo de la app', 3500); }
     });
     wrap.append(s({ id: 'datos', nombre: 'Tus datos' },
-      el('p', { class: 'hint', text: 'Todo queda guardado solo en este teléfono: ' + db.trabajos.length + ' trabajos y ' + db.presupuestos.length + ' presupuestos. Nada se sube a internet.' }),
+      el('p', { class: 'hint', text: 'Todo queda guardado en este teléfono: ' + db.trabajos.length + ' trabajos y ' + db.presupuestos.length + ' presupuestos.' + (c.drive.url ? ' Además se respalda solo en tu Google Drive.' : ' Lo único que sale es el respaldo.') }),
       el('p', { class: ult ? 'state ok' : 'state warn', text: ult ? 'Último respaldo: ' + haceCuanto(ult) : 'Todavía no hiciste ningún respaldo' }),
       el('div', { class: 'stack' },
         el('button', { type: 'button', class: 'btn primary', text: 'Hacer respaldo', onclick: async () => {
@@ -133,12 +149,61 @@ export const vistaAjustes = {
           if (ok) { marcarRespaldo(); recargar(); }
         } }),
         el('button', { type: 'button', class: 'btn', text: 'Cargar un respaldo', onclick: () => archivo.click() }), archivo),
-      el('p', { class: 'hint', text: 'El respaldo es un archivo que guardás donde quieras (tu Drive, un mail a vos mismo, la compu). Tiene datos de tus clientes: no lo compartas.' })));
+      el('p', { class: 'hint', text: 'El respaldo es un archivo que guardás donde quieras. Tiene datos de tus clientes (nunca las claves): no lo compartas.' })));
 
     wrap.append(el('p', { class: 'foot', text: 'Mario PC · versión ' + VERSION + (Capacitor.isNativePlatform() ? '' : ' (navegador)') }));
 
     if (params.ir) setTimeout(() => { const t = document.getElementById('aj-' + params.ir); if (t) t.scrollIntoView({ block: 'start' }); }, 50);
   },
 };
+
+function seccionDrive() {
+  const c = db.cfg;
+  const md = db.meta;
+  if (c.drive.url) {
+    const estado = md.errorDrive
+      ? el('p', { class: 'state warn', text: 'El último intento falló: ' + md.errorDrive })
+      : el('p', { class: md.ultimoDrive ? 'state ok' : 'state', text: md.ultimoDrive ? 'Último respaldo en Drive: ' + haceCuanto(md.ultimoDrive) + ' (' + new Date(md.ultimoDrive).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) + ')' : 'Conectado. Todavía no subió ningún respaldo.' });
+    const subir = el('button', { type: 'button', class: 'btn primary', text: 'Subir ahora' });
+    subir.addEventListener('click', async () => {
+      subir.textContent = 'Subiendo…'; subir.disabled = true;
+      const ok = await subirADrive({ manual: true });
+      toast(ok ? 'Respaldo guardado en tu Drive' : 'No se pudo subir: ' + (db.meta.errorDrive || 'error'), 4000);
+      recargar();
+    });
+    return [estado,
+      el('p', { class: 'hint', text: 'Se sube solo cuando hay cambios (como mucho cada media hora), al salir de la app o al volver a abrirla. Queda en la carpeta "Mario PC - Respaldos" de tu Drive, un archivo por día.' }),
+      el('div', { class: 'stack' }, subir,
+        botonConfirmar('Desconectar Drive', '¿Seguro? Tocá de nuevo', () => { c.drive.url = ''; md.ultimoDrive = null; md.errorDrive = null; guardarCfg(); recargar(); }, 'btn ghost small'))];
+  }
+  // Configuración, una sola vez
+  const link = campo('4. Pegá el link de la aplicación web', { type: 'url', inputmode: 'url', placeholder: 'https://script.google.com/macros/s/…/exec' });
+  const conectar = el('button', { type: 'button', class: 'btn primary', text: 'Probar y conectar' });
+  conectar.addEventListener('click', async () => {
+    const u = link.input.value.trim();
+    conectar.textContent = 'Probando…'; conectar.disabled = true;
+    const err = await probarLink(u);
+    conectar.textContent = 'Probar y conectar'; conectar.disabled = false;
+    if (err) { toast(err, 5000); return; }
+    c.drive.url = u; guardarCfg();
+    const ok = await subirADrive({ manual: true });
+    toast(ok ? 'Listo: primer respaldo guardado en tu Drive' : 'Conectado, pero el primer respaldo falló: ' + db.meta.errorDrive, 4500);
+    recargar();
+  });
+  link.input.addEventListener('input', () => { link.input.classList.toggle('ok', urlValida(link.input.value)); });
+  const paso = (n, txt) => el('li', {}, el('b', { text: n + ' ' }), txt); // la lista va sin números propios
+  return [
+    el('p', { class: 'hint', text: 'Se configura una sola vez, en unos 5 minutos. Es más cómodo desde la compu, pero se puede desde el teléfono con Chrome en "Sitio de escritorio".' }),
+    el('ol', { class: 'pasos' },
+      paso('1.', 'Copiá el código del respaldo.'),
+      paso('2.', 'Abrí Google Apps Script con tu cuenta de Google, borrá lo que haya en el editor, pegá el código y guardá (ícono del disquete).'),
+      paso('3.', 'Tocá Implementar → Nueva implementación → engranaje → Aplicación web. En "Ejecutar como" dejá "Yo" y en "Quién tiene acceso" elegí "Cualquier usuario". Implementar → Autorizar acceso → elegí tu cuenta → Configuración avanzada → Ir a … (no seguro) → Permitir. Copiá la URL de la aplicación web.')),
+    el('div', { class: 'stack' },
+      el('button', { type: 'button', class: 'btn', text: '1. Copiar el código', onclick: () => copiar(CODIGO_SCRIPT) }),
+      el('button', { type: 'button', class: 'btn', text: '2. Abrir Google Apps Script', onclick: () => abrirUrl('https://script.google.com/create') })),
+    link.wrap, conectar,
+    el('p', { class: 'hint', text: 'El aviso de "app no verificada" es normal: el script es tuyo y lo único que hace es guardar los respaldos en esa carpeta. El link es la llave: no lo compartas.' }),
+  ];
+}
 
 export { botonConfirmar };

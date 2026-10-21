@@ -73,11 +73,6 @@ function armar(d, k) {
     doc.lines([[0.75, 0.85], [1.55, -2.0]], x + 0.95, yy - 1.45, [1, 1], 'S', false);
     doc.setLineCap('butt');
   }
-  function flecha(x, yy, w) {
-    stroke(MUTED); doc.setLineWidth(0.4);
-    doc.line(x, yy, x + w, yy);
-    doc.line(x + w - 1.4, yy - 1.1, x + w, yy); doc.line(x + w - 1.4, yy + 1.1, x + w, yy);
-  }
 
   encabezado();
 
@@ -89,7 +84,7 @@ function armar(d, k) {
     return t.length;
   }
   const filas = Math.max(
-    dato('Cliente', d.cliente, M, 52),
+    dato('Cliente', (d.cliente || '-') + (d.tel ? '\n' + d.tel : ''), M, 52),
     dato('Equipo', d.equipo, M + 56, 62),
     dato('Recibido', d.fechaRecepcion, M + 124, 26),
     dato('Entregado', d.fechaEntrega, M + 152, 26));
@@ -131,6 +126,18 @@ function armar(d, k) {
     y += 1;
   }
 
+  if (d.datosEscritorio) {
+    const bh = 15;
+    lugar(bh + v(4));
+    y += v(1);
+    fill(ZEBRA); doc.rect(M, y, CW, bh, 'F');
+    fill(GREEN); doc.rect(M, y, 1.8, bh, 'F');
+    font('bold', 7.5); color(MUTED); doc.text('TUS ARCHIVOS', M + 7, y + 5.6, { charSpace: 0.5 });
+    font('normal', 10); color(INK);
+    doc.text('Los dejé en la carpeta "Datos recuperados", en el escritorio de tu equipo.', M + 7, y + 11.2, { maxWidth: CW - 12 });
+    y += bh + v(3);
+  }
+
   if (d.repuestos.length) {
     seccion('Repuestos instalados', 16);
     fill(INK); doc.rect(M, y, CW, 7, 'F');
@@ -140,7 +147,8 @@ function armar(d, k) {
     y += 7;
     d.repuestos.forEach((r, i) => {
       font('normal', 10);
-      const n = doc.splitTextToSize(r.nombre || '-', 62), t = doc.splitTextToSize(r.detalle || '-', CW - 73);
+      const det = [(r.detalle || '').trim(), r.cliente ? 'Provisto por el cliente' : ''].filter(Boolean).join(' · ');
+      const n = doc.splitTextToSize(r.nombre || '-', 62), t = doc.splitTextToSize(det || '-', CW - 73);
       const h = Math.max(n.length, t.length) * v(4.4) + v(4);
       lugar(h);
       if (i % 2 === 0) { fill(ZEBRA); doc.rect(M, y, CW, h, 'F'); }
@@ -149,28 +157,6 @@ function armar(d, k) {
       y += h;
     });
     y += 3;
-  }
-
-  if (d.metricas.length) {
-    seccion('Antes y después', 16);
-    const cA = M + 92, cD = M + 140;
-    font('bold', 7.5); color(MUTED);
-    doc.text('MEDICIÓN', M, y, { charSpace: 0.3 });
-    doc.text('ANTES', cA, y, { charSpace: 0.3 });
-    doc.text('DESPUÉS', cD, y, { charSpace: 0.3 });
-    y += 3;
-    d.metricas.forEach((m) => {
-      const h = v(9);
-      lugar(h);
-      stroke(LINE); doc.setLineWidth(0.3); doc.line(M, y, M + CW, y);
-      font('normal', 10); color(INK); doc.text(doc.splitTextToSize(m.nombre || '-', 86)[0], M, y + h * 0.66);
-      color(MUTED); doc.text(doc.splitTextToSize(m.antes || '-', 36)[0], cA, y + h * 0.66);
-      flecha(cD - 12, y + h * 0.53, 7);
-      font('bold', 11); color(GREEN_D); doc.text(doc.splitTextToSize(m.despues || '-', CW - (cD - M))[0], cD, y + h * 0.66);
-      y += h;
-    });
-    stroke(LINE); doc.line(M, y, M + CW, y);
-    y += 4;
   }
 
   if (d.pruebas.length) {

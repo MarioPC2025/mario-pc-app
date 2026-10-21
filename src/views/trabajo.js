@@ -1,10 +1,10 @@
 // Ficha de un trabajo: estado, acciones y todos los datos.
 
-import { el, fmt, fechaFmt, haceCuanto, botonConfirmar, toast, diaCorto } from '../util.js';
-import { db, trabajoPorId, guardarTrabajo, borrarTrabajo } from '../store.js';
-import { ESTADOS, equipoNombre, claveNombre, RESULTADOS } from '../catalog.js';
+import { el, fmt, fechaFmt, fechaCorta, haceCuanto, botonConfirmar, toast, diaCorto } from '../util.js';
+import { db, trabajoPorId, guardarTrabajo, borrarTrabajo, trabajosDelCliente, clienteDejoResena } from '../store.js';
+import { ESTADOS, equipoNombre, claveNombre, estadoCorto, RESULTADOS } from '../catalog.js';
 import { accList, danoList } from '../render/recepcion.js';
-import { imprimirEtiqueta, verComprobante, enviarComprobante, compartirEtiqueta, verInforme, avisarListo, mensajeInforme } from '../acciones.js';
+import { imprimirEtiqueta, verComprobante, enviarComprobante, compartirEtiqueta, verInforme, avisarListo, mensajeInforme, marcarResenaPedida } from '../acciones.js';
 import { abrirWhatsApp, llamar } from '../files.js';
 import { ir, atras, setTitulo, setAcciones, hoja } from '../nav.js';
 
@@ -35,7 +35,9 @@ export const vistaTrabajo = {
     }
     function cambiarEstado(id) {
       if (t.estado === id) return;
+      const teniaClave = !!t.claveValor;
       t.estado = id; guardarTrabajo(t); pintarEstados();
+      if (id === 'entregado' && teniaClave) { toast('Entregado. Borré la clave del cliente'); pintarClave(); }
       if (id === 'listo') hoja('Equipo listo', (cerrar) => [
         el('p', { class: 'sheet-p', text: '¿Le aviso a ' + (t.cliente.nombre.trim() || 'el cliente') + ' por WhatsApp que ya puede retirarlo?' }),
         el('div', { class: 'stack' },
@@ -76,14 +78,36 @@ export const vistaTrabajo = {
     // Informe
     if (tieneInforme) {
       const res = RESULTADOS.find((r) => r.id === t.informe.resultado) || RESULTADOS[0];
+      // Reseña en Google: cuándo se pidió y si la dejó
+      const resena = el('div');
+      const pintarResena = () => {
+        const otraVez = !t.resenaDejo && clienteDejoResena(t);
+        resena.replaceChildren(
+          fila('Reseña en Google', t.resenaDejo ? 'La dejó' : otraVez ? 'Ya dejó en otro trabajo' : t.resenaPedida ? 'Pedida el ' + fechaCorta(t.resenaPedida) : 'Sin pedir'),
+          el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: !!t.resenaDejo, onchange: (e) => { t.resenaDejo = e.target.checked; guardarTrabajo(t); pintarResena(); } }),
+            el('span', { text: 'Ya dejó la reseña' })));
+      };
+      pintarResena();
       wrap.append(seccion('Informe técnico',
         fila('Resultado', res.nombre),
         fila('Entregado', fechaFmt(t.informe.fechaEntrega)),
         t.informe.total != null ? fila('Importe', fmt(t.informe.total)) : null,
+        resena,
         el('div', { class: 'row-btns' },
-          el('button', { type: 'button', class: 'btn small primary', text: 'Ver PDF', onclick: () => verInforme(t) }),
-          el('button', { type: 'button', class: 'btn small', text: 'Mensaje al cliente', onclick: () => abrirWhatsApp(t.cliente.tel, mensajeInforme(t)) }))));
+          el('button', { type: 'button', class: 'btn small primary', text: 'Ver PDF', onclick: () => verInforme(t, () => pintarResena()) }),
+          el('button', { type: 'button', class: 'btn small', text: 'Mensaje al cliente', onclick: () => { abrirWhatsApp(t.cliente.tel, mensajeInforme(t)); marcarResenaPedida(t); pintarResena(); } }))));
     }
+
+    // Clave: oculta hasta tocar "Ver"
+    const claveBox = el('div');
+    function pintarClave(ver) {
+      if (t.clave === 'no') { claveBox.replaceChildren(fila('Clave', 'No tiene')); return; }
+      if (!t.claveValor) { claveBox.replaceChildren(fila('Clave', claveNombre(t.clave) + (t.estado === 'entregado' ? ' (borrada al entregar)' : ' (no anotada)'))); return; }
+      claveBox.replaceChildren(el('div', { class: 'kv' }, el('span', { class: 'k', text: 'Clave (' + claveNombre(t.clave) + ')' }),
+        el('span', { class: 'v clave-v' }, el('span', { class: ver ? 'clave-on' : '', text: ver ? t.claveValor : '••••' }),
+          el('button', { type: 'button', class: 'btn small', text: ver ? 'Ocultar' : 'Ver', onclick: () => pintarClave(!ver) }))));
+    }
+    pintarClave(false);
 
     // Datos
     const tel = t.cliente.tel.trim();
@@ -98,12 +122,20 @@ export const vistaTrabajo = {
       fila('Marca', t.equipo.marca.trim() || '-'),
       fila('Modelo', t.equipo.modelo.trim() || '-'),
       fila('N° de serie', t.equipo.serie.trim() || '-'),
-      fila('Clave', t.clave === 'no' ? 'No tiene' : claveNombre(t.clave) + ' (no anotada)')));
+      claveBox));
     wrap.append(seccion('Falla que reportó', el('p', { class: 'para', text: t.falla.trim() || '-' })));
     wrap.append(seccion('Al recibirlo',
       fila('Accesorios', accList(t).join(', ') || 'Ninguno'),
       fila('Estado físico', danoList(t, false).join(', ') || 'Sin daños visibles'),
       t.obs.trim() ? fila('Observaciones', t.obs.trim()) : null));
+
+    const otros = trabajosDelCliente(t.cliente.tel, t.id);
+    if (otros.length) {
+      wrap.append(seccion('Otros trabajos de este cliente', ...otros.slice(0, 8).map((x) => el('button', { type: 'button', class: 'hist-row', onclick: () => ir('trabajo', { id: x.id }) },
+        el('span', { class: 'hist-n', text: 'N° ' + x.orden }),
+        el('span', { class: 'hist-eq', text: [equipoNombre(x.equipo.tipo), x.equipo.marca].filter((v) => String(v).trim()).join(' ') + ' · ' + fechaCorta(x.fecha) + '/' + String(x.fecha).slice(2, 4) }),
+        el('span', { class: 'badge b-' + x.estado, text: estadoCorto(x.estado) })))));
+    }
 
     const pres = t.presupuestoId ? db.presupuestos.find((p) => p.id === t.presupuestoId) : null;
     if (pres) {

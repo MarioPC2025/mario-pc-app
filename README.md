@@ -7,7 +7,7 @@ App para Android que junta en un solo lugar:
 - **Informe técnico**: el PDF que se entrega con el equipo (diagnóstico, qué se hizo, repuestos, antes y después, pruebas, recomendaciones y garantía).
 - **Trabajos**: el historial de equipos con su estado (Recibido → En reparación → Listo → Entregado).
 
-Todo queda guardado **solo en el teléfono**. No usa internet ni cuentas. El respaldo se hace a mano desde Ajustes → Tus datos.
+Todo queda guardado **en el teléfono**. Lo único que sale es el respaldo: a mano (Ajustes → Tus datos) o automático a tu Google Drive (Ajustes → Respaldo en Google Drive), con un script de Google Apps Script que se copia desde la misma pantalla (`src/drive.js`). Las claves de los clientes nunca salen del teléfono y se borran al entregar el equipo.
 
 ## Instalar o actualizar
 
